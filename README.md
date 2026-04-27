@@ -133,6 +133,22 @@ The system generates structured JSON metadata for enterprise monitoring:
 
 ---
 
+## 💾 Secure Database Access (TCP)
+
+The PiltiSmart Bridge also supports database protocols (PostgreSQL, MySQL, Redis). Because databases use **TCP**, they require a local client bridge.
+
+### 1. Server Configuration
+Map a hostname (e.g., `db-purple.piltismart.com`) to your database port (e.g., `5432`) in the Cloudflare Dashboard as a **TCP** service.
+
+### 2. Client Connection (Your Laptop)
+Since you cannot open a database in a browser, run this command on your machine to create a local secure tunnel:
+```bash
+cloudflared access tcp --hostname db-purple.piltismart.com --url localhost:5432
+```
+Now, point your database tool (DBeaver, PGAdmin) to `localhost:5432`.
+
+---
+
 ## 📞 Support
 For enterprise support and custom integrations, please visit [PiltiSmart Solutions](https://piltismart.com).
 
