@@ -1,90 +1,122 @@
-# ThingsBoard SSH & Web Gatekeeper
+# PiltiSmart Cloudflare Bridge
 
-A secure, zero-config remote access bridge that protects any service (SSH, Web Apps, APIs) using ThingsBoard JWT Authentication via Cloudflare Tunnels.
+### Enterprise-Grade Secure Remote Access & Service Gatekeeper
 
-## 🚀 Features
-*   **Universal Gatekeeper**: Protect any port with ThingsBoard Login or expose it publicly.
-*   **Zero-Config Networking**: Works behind NAT via Cloudflare Quick Tunnels (no port forwarding).
-*   **Dynamic Scaling**: Add or remove protected ports via a single environment variable.
-*   **Rich Proxmox Integration**: Automatically updates Proxmox container notes with URLs and metadata in JSON format.
-*   **Build Once, Deploy Many**: Host-independent architecture; works on any Proxmox node or Linux server.
+![PiltiSmart Logo](https://piltismart.com/img/logo-new1.png)
+
+PiltiSmart Cloudflare Bridge is a high-performance, zero-trust remote access solution designed to bridge local services (SSH, Web, APIs) to the cloud securely. By leveraging **Cloudflare Tunnels** and **ThingsBoard JWT Authentication**, it provides a unified "Universal Gatekeeper" that can protect any port with enterprise-level security.
 
 ---
 
-## 🛠️ Installation (Proxmox Host)
+## 🏗️ Architecture & Flow
 
-### Step 1: Prepare the Host Polling Script
-This script discovers running bridges and updates the Proxmox "Notes" section with the access URLs.
+The system operates as a smart proxy layer between the public internet and your private infrastructure.
 
-1.  SSH into your Proxmox Host.
-2.  Create the script:
-    ```bash
-    cat << 'EOF' > /usr/local/bin/update-bridge-notes.sh
-    #!/bin/bash
-    export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-    PCT=/usr/sbin/pct
-    RUNNING_VMS=$($PCT list | awk 'NR>1 && $2=="running" {print $1}')
-    for VMID in $RUNNING_VMS; do
-        URL=$($PCT exec $VMID -- cat /app/tmp/tunnel_url 2>/dev/null)
-        if [ -n "$URL" ]; then
-            $PCT set $VMID --description "$URL"
-        fi
-    done
-    EOF
-    chmod +x /usr/local/bin/update-bridge-notes.sh
-    ```
-3.  Add to Crontab (runs every minute):
-    ```bash
-    (crontab -l 2>/dev/null; echo "* * * * * /usr/local/bin/update-bridge-notes.sh") | crontab -
-    ```
+### 1. High-Level Architecture
+```mermaid
+graph TD
+    User((Remote User)) --> CF[Cloudflare Edge]
+    subgraph "Local Environment (LXC/Docker)"
+        CF --> Tunnel[Cloudflare Tunnel]
+        Tunnel --> Bridge{Universal Gatekeeper}
+        
+        subgraph "Access Modes"
+            Bridge -- "Private Mode" --> Auth[TB Auth Bridge]
+            Bridge -- "Public Mode" --> Direct[Direct Proxy]
+        end
+        
+        Auth --> TB[ThingsBoard Server]
+        Auth -- "Success" --> ServiceA[Private Service]
+        Direct --> ServiceB[Public Service]
+    end
+```
+
+### 2. Authentication Flow (Private Mode)
+```mermaid
+sequenceDiagram
+    participant User
+    participant Gatekeeper as Universal Gatekeeper
+    participant TB as ThingsBoard API
+    participant App as Target Service
+
+    User->>Gatekeeper: Request Access (URL)
+    Gatekeeper-->>User: Show Secure Login (PiltiSmart UI)
+    User->>Gatekeeper: Submit Credentials
+    Gatekeeper->>TB: Verify JWT / Login
+    TB-->>Gatekeeper: Success (JWT Token)
+    Gatekeeper-->>User: Set Session & Redirect
+    User->>Gatekeeper: Access with Token
+    Gatekeeper->>App: Proxy Traffic
+    App-->>User: Secure Service Access
+```
 
 ---
 
-## 📦 Deployment (Inside LXC)
+## 🚀 Key Features
 
-### Step 1: Configuration (`docker-compose.yml`)
-The core of the system is the `EXPOSE_PORTS` variable. Use the format: `EXTERNAL_PORT:MODE:INTERNAL_PORT`.
+*   **🛡️ Universal Gatekeeper**: Granular control over which services require ThingsBoard authentication (`private`) and which are open (`public`).
+*   **🔗 Zero-Config Networking**: Bypasses firewalls and NAT using Cloudflare Quick Tunnels. No port forwarding required.
+*   **📊 Rich Metadata Integration**: Real-time reporting of service health and URLs directly to Proxmox Notes in structured JSON.
+*   **⚡ Dynamic Multi-Port Scaling**: Manage multiple services (SSH, HTTP, MQTT, etc.) from a single `docker-compose` configuration.
+*   **🎨 Premium UI**: Optimized, branded login experience with real-time validation and error handling.
 
-*   **MODE**: `private` (Requires ThingsBoard Login) or `public` (Bypasses Login).
-*   **INTERNAL_PORT**: `7681` for the built-in terminal, or any port on the LXC host.
+---
+
+## 🛠️ Installation & Setup
+
+### 1. Host Monitoring (Proxmox)
+Deploy the polling script on your Proxmox host to automatically sync URLs to the VM Notes.
+
+```bash
+cat << 'EOF' > /usr/local/bin/update-bridge-notes.sh
+#!/bin/bash
+# Enterprise Sync Script for PiltiSmart Bridge
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+PCT=/usr/sbin/pct
+RUNNING_VMS=$($PCT list | awk 'NR>1 && $2=="running" {print $1}')
+for VMID in $RUNNING_VMS; do
+    URL=$($PCT exec $VMID -- cat /app/tmp/tunnel_url 2>/dev/null)
+    if [ -n "$URL" ]; then
+        $PCT set $VMID --description "$URL"
+    fi
+done
+EOF
+chmod +x /usr/local/bin/update-bridge-notes.sh
+```
+
+### 2. Container Deployment (`docker-compose.yml`)
+Configure your services using the `EXT_PORT:MODE:INT_PORT` schema.
 
 ```yaml
 services:
-  tb-gatekeeper:
+  gatekeeper:
     image: piltismartsolutions/tb-ssh-bridge:latest
     environment:
       - TB_SERVER=https://tb.piltismart.com
       - SSH_HOST=172.17.0.1
-      # Configuration Example:
-      # Port 3000 -> Private access to SSH (7681)
-      # Port 80   -> Public access to Web App (80)
-      - EXPOSE_PORTS=3000:private:7681, 80:public:80
+      # Configuration Schema: EXTERNAL_PORT:ACCESS_MODE:INTERNAL_TARGET
+      - EXPOSE_PORTS=3000:private:7681, 80:public:80, 8080:private:8080
     volumes:
       - ./tmp:/tmp
     restart: always
 ```
 
-### Step 2: Start the Stack
-```bash
-docker compose up -d
-```
-
 ---
 
-## 📊 Proxmox Notes (Rich JSON)
-Once running, check your Proxmox container **Notes**. You will see a structured JSON object:
+## 📑 Service Reporting
+The system generates structured JSON metadata for enterprise monitoring:
 
 ```json
 {
   "last_updated": "2026-04-27T13:46:17Z",
   "services": {
     "3000": {
-      "url": "https://denmark-buses-aimed-gently.trycloudflare.com",
+      "url": "https://village-leadership-variable-photos.trycloudflare.com",
       "access": "private",
       "target": "7681"
     },
     "80": {
-      "url": "https://suburban-athena-lib-inappropriate.trycloudflare.com",
+      "url": "https://installations-dear-cap-chance.trycloudflare.com",
       "access": "public",
       "target": "80"
     }
@@ -94,15 +126,14 @@ Once running, check your Proxmox container **Notes**. You will see a structured 
 
 ---
 
-## ⚙️ Configuration Variables
-
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `TB_SERVER` | Your ThingsBoard URL | `https://tb.piltismart.com` |
-| `SSH_HOST` | The LXC Gateway IP | `172.17.0.1` |
-| `EXPOSE_PORTS` | Comma-separated `EXT:MODE:INT` list | `3000:private:7681` |
+## 🛡️ Security Best Practices
+1.  **JWT Verification**: All `private` traffic is intercepted by the PiltiSmart Auth Bridge which validates tokens against the ThingsBoard API.
+2.  **Environment Isolation**: Target services are accessed via the internal Docker gateway (`172.17.0.1`), keeping them shielded from direct public exposure.
+3.  **TLS Encryption**: All tunnels utilize Cloudflare's global edge network for end-to-end encryption.
 
 ---
 
-## 🛡️ Security
-*   **JWT Validation**: Private ports forward to an Auth Bridge that v
+## 📞 Support
+For enterprise support and custom integrations, please visit [PiltiSmart Solutions](https://piltismart.com).
+
+&copy; 2026 PiltiSmart Solutions. All rights reserved.
