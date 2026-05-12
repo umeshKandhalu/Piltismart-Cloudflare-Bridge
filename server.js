@@ -64,4 +64,23 @@ const wsProxy = createProxyMiddleware({
 
 // 5. Secure Proxy Routes
 app.use('/ws', authGuard, wsProxy);
-app.use('/token', authGuard, wsPr
+app.use('/token', authGuard, wsProxy); // ttyd token endpoint
+app.use('/', authGuard, createProxyMiddleware({
+    target: TARGET_URL,
+    changeOrigin: true,
+    logLevel: 'warn',
+}));
+
+// Handle Websocket upgrade
+const server = app.listen(BRIDGE_PORT, '0.0.0.0', () => {
+    console.log(`[Gatekeeper] Running on port ${BRIDGE_PORT}`);
+});
+
+server.on('upgrade', (req, socket, head) => {
+    // Basic check for token in WebSocket upgrade
+    if (req.url.includes('token=')) {
+        wsProxy.upgrade(req, socket, head);
+    } else {
+        socket.destroy();
+    }
+});

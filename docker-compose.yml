@@ -1,13 +1,13 @@
 services:
   tb-ssh-bridge:
+    build: https://github.com/umeshKandhalu/Piltismart-Cloudflare-Bridge.git#master
     image: piltismartsolutions/tb-ssh-bridge:latest
+    container_name: piltismart-gatekeeper
     ports:
       - "3000:3000"
     environment:
       - TB_SERVER=https://tb.piltismart.com
       - BRIDGE_PORT=3000
       - SSH_HOST=172.17.0.1
-      - EXPOSE_PORTS=3000:private:7681, 80:public:80
+      - EXPOSE_PORTS=3000:private:7681, 80:public:80, 6379:tcp:6379
     restart: always
-    # To enable reporting the Cloudflare URL to Proxmox, 
-    # you can mount the log directory or use 

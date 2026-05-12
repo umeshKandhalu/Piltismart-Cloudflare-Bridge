@@ -27,4 +27,15 @@ ENV TB_SERVER=https://tb.piltismart.com
 ENV TTYD_PORT=7681
 ENV BRIDGE_PORT=3000
 ENV SSH_HOST=172.17.0.1
-ENV SS
+ENV SSH_USER=root
+ENV EXPOSE_PORTS=3000
+
+# Expose ports
+EXPOSE 3000
+EXPOSE 80
+EXPOSE 8080
+EXPOSE 8883
+EXPOSE 1883
+
+# Use entrypoint script to launch services and report URL
+CMD ["/app/entrypoint.sh"]

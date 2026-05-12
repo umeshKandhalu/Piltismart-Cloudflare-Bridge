@@ -108,4 +108,65 @@
             </div>
             <div class="input-group">
                 <label>Password</label>
-      
+                <input type="password" id="password" name="password" placeholder="••••••••" required autocomplete="current-password">
+            </div>
+            <button type="submit" id="submit-btn">Login</button>
+        </form>
+        
+        <div class="footer">
+            &copy; 2026 PiltiSmart Solutions
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('login-form');
+        const errorMsg = document.getElementById('error-msg');
+        const submitBtn = document.getElementById('submit-btn');
+        const emailInput = document.getElementById('username');
+
+        function showError(text) {
+            errorMsg.textContent = text;
+            errorMsg.style.display = 'block';
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Login';
+        }
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // 1. Robust Email Validation using Regex
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(emailInput.value)) {
+                showError('Please enter a valid email address.');
+                return;
+            }
+
+            // 2. UI State
+            errorMsg.style.display = 'none';
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Authenticating...';
+
+            const username = emailInput.value;
+            const password = document.getElementById('password').value;
+
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.token) {
+                    window.location.href = `/?token=${data.token}`;
+                } else {
+                    throw new Error('Unauthorized');
+                }
+            } catch (err) {
+                showError('Login failed. Please try again.');
+            }
+        });
+    </script>
+</body>
+</html>
