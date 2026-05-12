@@ -75,7 +75,7 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 PCT=/usr/sbin/pct
 RUNNING_VMS=$($PCT list | awk 'NR>1 && $2=="running" {print $1}')
 for VMID in $RUNNING_VMS; do
-    URL=$($PCT exec $VMID -- cat /app/tmp/tunnel_url 2>/dev/null)
+    URL=$($PCT exec $VMID -- docker exec piltismart-gatekeeper cat /tmp/tunnel_url 2>/dev/null)
     if [ -n "$URL" ]; then
         $PCT set $VMID --description "$URL"
     fi
@@ -84,20 +84,23 @@ EOF
 chmod +x /usr/local/bin/update-bridge-notes.sh
 ```
 
-### 2. Container Deployment (`docker-compose.yml`)
-Configure your services using the `EXT_PORT:MODE:INT_PORT` schema.
+### 2. Zero-Friction Container Deployment
+You do not need to download the source code or build images manually. Simply create this `docker-compose.yml` file anywhere inside your LXC and run `docker compose up -d`.
 
 ```yaml
 services:
-  gatekeeper:
+  tb-ssh-bridge:
+    build: https://github.com/umeshKandhalu/Piltismart-Cloudflare-Bridge.git#master
     image: piltismartsolutions/tb-ssh-bridge:latest
+    container_name: piltismart-gatekeeper
+    ports:
+      - "3000:3000"
     environment:
       - TB_SERVER=https://tb.piltismart.com
+      - BRIDGE_PORT=3000
       - SSH_HOST=172.17.0.1
       # Configuration Schema: EXTERNAL_PORT:ACCESS_MODE:INTERNAL_TARGET
       - EXPOSE_PORTS=3000:private:7681, 80:public:80, 8080:private:8080
-    volumes:
-      - ./tmp:/tmp
     restart: always
 ```
 
