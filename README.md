@@ -90,7 +90,6 @@ You do not need to download the source code or build images manually. Simply cre
 ```yaml
 services:
   tb-ssh-bridge:
-    build: https://github.com/umeshKandhalu/Piltismart-Cloudflare-Bridge.git#master
     image: piltismartsolutions/tb-ssh-bridge:latest
     container_name: piltismart-gatekeeper
     ports:
