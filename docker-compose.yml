@@ -1,6 +1,6 @@
 services:
   tb-ssh-bridge:
-    image: piltismartsolutions/tb-ssh-bridge:latest
+    image: ghcr.io/umeshkandhalu/piltismart-cloudflare-bridge:latest
     container_name: piltismart-gateway
     network_mode: host
     environment:
