@@ -1,7 +1,6 @@
 services:
   tb-ssh-bridge:
-    build: .
-    image: piltismartsolutions/tb-ssh-bridge:local
+    image: piltismartsolutions/tb-ssh-bridge:latest
     container_name: piltismart-gateway
     network_mode: host
     environment:
