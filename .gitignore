@@ -3,3 +3,6 @@ tmp/
 *.log
 .DS_Store
 .git/
+
+.env
+gateway-data/

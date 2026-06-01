@@ -150,7 +150,7 @@
             const password = document.getElementById('password').value;
 
             try {
-                const response = await fetch('/login', {
+                const response = await fetch('/__auth__', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
@@ -159,7 +159,10 @@
                 const data = await response.json();
 
                 if (response.ok && data.token) {
-                    window.location.href = `/?token=${data.token}`;
+                    const urlParams = new URLSearchParams(window.location.search);
+                    const redirectUrl = urlParams.get('redirect') || '/';
+                    const separator = redirectUrl.includes('?') ? '&' : '?';
+                    window.location.href = `${redirectUrl}${separator}token=${data.token}`;
                 } else {
                     throw new Error('Unauthorized');
                 }
