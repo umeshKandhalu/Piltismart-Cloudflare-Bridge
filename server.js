@@ -696,7 +696,7 @@ proxyServer.on('upgrade', (req, socket, head) => {
     if (!routes[adminHostname]) {
         console.log(`[Gateway] Auto-registering Admin API at ${adminHostname}`);
         try {
-            await createCnameRecord(adminHostname);
+            await createDnsRecord(adminHostname);
             routes[adminHostname] = {
                 target: `localhost:${ADMIN_PORT}`,
                 mode: 'public',
