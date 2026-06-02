@@ -62,7 +62,7 @@ const cfAxios = axios.create({
 // --- AUTONOMOUS TUNNEL MANAGER ---
 
 let ACTIVE_TUNNEL_ID = null;
-let cloudflaredProcess = null;
+let cloudflaredProcesses = [];
 
 async function setupAutonomousTunnel() {
     if (fs.existsSync(CREDENTIALS_FILE)) {
@@ -111,19 +111,29 @@ async function setupAutonomousTunnel() {
     }
 }
 
-function startCloudflared() {
-    console.log(`[Gateway] Starting cloudflared tunnel...`);
-    cloudflaredProcess = spawn('/usr/local/bin/cloudflared', ['tunnel', '--no-autoupdate', 'run', ACTIVE_TUNNEL_ID], {
+function startCloudflaredReplica(replicaId) {
+    console.log(`[Gateway] Starting cloudflared tunnel replica ${replicaId}...`);
+    const childProc = spawn('/usr/local/bin/cloudflared', ['tunnel', '--no-autoupdate', 'run', ACTIVE_TUNNEL_ID], {
         env: { ...process.env, TUNNEL_CRED_FILE: CREDENTIALS_FILE }
     });
 
-    cloudflaredProcess.stdout.on('data', (data) => console.log(`[cloudflared] ${data.toString().trim()}`));
-    cloudflaredProcess.stderr.on('data', (data) => console.error(`[cloudflared] ${data.toString().trim()}`));
+    childProc.stdout.on('data', (data) => console.log(`[cloudflared-${replicaId}] ${data.toString().trim()}`));
+    childProc.stderr.on('data', (data) => console.error(`[cloudflared-${replicaId}] ${data.toString().trim()}`));
 
-    cloudflaredProcess.on('close', (code) => {
-        console.error(`[Gateway] cloudflared crashed with code ${code}. Restarting in 5 seconds...`);
-        setTimeout(startCloudflared, 5000);
+    childProc.on('close', (code) => {
+        console.error(`[Gateway] cloudflared replica ${replicaId} crashed with code ${code}. Restarting in 5 seconds...`);
+        setTimeout(() => startCloudflaredReplica(replicaId), 5000);
     });
+    
+    return childProc;
+}
+
+function startCloudflared() {
+    const replicas = parseInt(process.env.TUNNEL_REPLICAS) || 4;
+    console.log(`[Gateway] Spawning ${replicas} cloudflared replicas for maximum throughput...`);
+    for (let i = 1; i <= replicas; i++) {
+        cloudflaredProcesses.push(startCloudflaredReplica(i));
+    }
 }
 
 // --- CLOUDFLARE ROUTING AUTOMATION ---
