@@ -253,12 +253,39 @@ function pingTcp(host, port) {
 }
 
 setInterval(async () => {
-    for (const data of Object.values(routes)) {
+    let stateChanged = false;
+    for (const [hostname, data] of Object.entries(routes)) {
         const [host, port] = data.target.split(':');
         if (host && port) {
-            data.status = await pingTcp(host, parseInt(port));
+            const currentStatus = await pingTcp(host, parseInt(port));
+            
+            // Self-Healing IP Tracking
+            if (currentStatus === 'offline' && data.vmid && data.vmid !== 999) {
+                console.warn(`[Self-Healing] ${hostname} is offline. Checking Proxmox for IP drift...`);
+                try {
+                    const details = await discoverLxcDetails(data.vmid);
+                    if (details.ip && details.ip !== host) {
+                        console.log(`[Self-Healing] IP Drift Detected for VMID ${data.vmid}! Healing: ${host} -> ${details.ip}`);
+                        data.target = `${details.ip}:${port}`;
+                        data.status = await pingTcp(details.ip, parseInt(port));
+                        stateChanged = true;
+                    } else {
+                        data.status = 'offline';
+                    }
+                } catch (e) {
+                    data.status = 'offline';
+                }
+            } else {
+                data.status = currentStatus;
+            }
+            
             data.lastChecked = new Date().toISOString();
         }
+    }
+    
+    if (stateChanged) {
+        saveState();
+        updateCloudflareConfig();
     }
 }, 15000);
 
