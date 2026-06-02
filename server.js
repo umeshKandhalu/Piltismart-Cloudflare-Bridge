@@ -506,7 +506,6 @@ adminApp.post('/register', async (req, res) => {
         }
     }
 
-    }
 
     try {
         const urls = await registerService(vmid, hostname, ip, expose, !!force);
