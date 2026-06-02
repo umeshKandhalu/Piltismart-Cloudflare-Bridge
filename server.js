@@ -711,6 +711,9 @@ proxyServer.on('upgrade', (req, socket, head) => {
         }
     }
 
+    console.log("[Gateway] Syncing Ingress routes with Cloudflare...");
+    await updateTunnelIngress();
+
     console.log("Starting Autonomous Gateway Manager...");
     startCloudflared();
 })();
