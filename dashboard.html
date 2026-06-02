@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PiltiSmart Gateway Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: rgba(255, 255, 255, 0.03);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --accent: #3b82f6;
+            --accent-glow: rgba(59, 130, 246, 0.5);
+            --success: #10b981;
+            --success-glow: rgba(16, 185, 129, 0.4);
+            --danger: #ef4444;
+            --danger-glow: rgba(239, 68, 68, 0.4);
+            --warning: #f59e0b;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.15) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--card-border);
+        }
+
+        h1 {
+            margin: 0;
+            font-weight: 600;
+            font-size: 1.8rem;
+            letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            border-radius: 8px;
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+
+        .sys-info {
+            display: flex;
+            gap: 1.5rem;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .sys-stat {
+            background: var(--card-bg);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            border: 1px solid var(--card-border);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Dashboard Grid */
+        .vmid-group {
+            margin-bottom: 3rem;
+        }
+
+        .vmid-header {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .vmid-header::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: var(--card-border);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--card-border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+
+        .card-title {
+            font-weight: 500;
+            font-size: 1.1rem;
+            margin: 0;
+            word-break: break-all;
+            padding-right: 15px;
+        }
+        
+        .card-url {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 0.85rem;
+            display: block;
+            margin-top: 4px;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+        
+        .card-url:hover {
+            opacity: 1;
+            text-decoration: underline;
+        }
+
+        .status-badge {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-online {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.1);
+        }
+
+        .status-online::before {
+            content: "";
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+
+        .status-offline {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+        }
+
+        .status-offline::before {
+            content: "";
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--danger);
+        }
+
+        .status-pending {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .metric {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metric-value {
+            font-size: 1.1rem;
+            font-weight: 500;
+            display: flex;
+            align-items: baseline;
+            gap: 4px;
+        }
+        
+        .metric-unit {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .target-tag {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.05);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+        }
+
+        /* Modal */
+        #auth-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(15px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.3s;
+        }
+
+        .modal {
+            background: #111827;
+            border: 1px solid var(--card-border);
+            border-radius: 20px;
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            text-align: center;
+        }
+
+        .modal h2 {
+            margin-top: 0;
+            margin-bottom: 1.5rem;
+            font-weight: 500;
+        }
+
+        .input-group {
+            position: relative;
+            margin-bottom: 1.5rem;
+        }
+
+        input {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--card-border);
+            padding: 12px 16px;
+            border-radius: 10px;
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+
+        button {
+            width: 100%;
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 10px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .error-msg {
+            color: var(--danger);
+            font-size: 0.85rem;
+            margin-top: -10px;
+            margin-bottom: 15px;
+            display: none;
+        }
+
+        .loader {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Utilities */
+        .hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 4rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="auth-overlay">
+        <div class="modal">
+            <div class="logo-icon" style="margin: 0 auto 1.5rem auto; width: 48px; height: 48px;"></div>
+            <h2>Gateway Authentication</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2rem;">Enter your API Key to access the monitoring dashboard.</p>
+            <div class="error-msg" id="auth-error">Invalid API Key</div>
+            <div class="input-group">
+                <input type="password" id="api-key" placeholder="GATEWAY_API_KEY" onkeydown="if(event.key === 'Enter') authenticate()">
+            </div>
+            <button onclick="authenticate()" id="auth-btn">Access Dashboard</button>
+        </div>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>
+                <div class="logo-icon"></div>
+                PiltiSmart Gateway
+            </h1>
+            <div class="sys-info" id="sys-info">
+                <div class="sys-stat">Connecting...</div>
+            </div>
+        </header>
+
+        <div id="dashboard-content">
+            <div class="empty-state">
+                <div class="loader" style="width: 40px; height: 40px; border-width: 3px; margin-bottom: 1rem;"></div>
+                <div>Fetching live metrics...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = '/services';
+        let apiKey = localStorage.getItem('gateway_api_key');
+        let pollInterval;
+
+        function formatBytes(bytes, decimals = 2) {
+            if (!+bytes) return '0.00 B';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+
+        function getStatusBadge(status) {
+            if (status === 'online') return `<span class="status-badge status-online">Online</span>`;
+            if (status === 'offline') return `<span class="status-badge status-offline">Offline</span>`;
+            return `<span class="status-badge status-pending">Pending</span>`;
+        }
+
+        async function authenticate() {
+            const inputKey = document.getElementById('api-key').value;
+            const btn = document.getElementById('auth-btn');
+            
+            if (!inputKey) return;
+            
+            btn.innerHTML = '<div class="loader"></div>';
+            
+            try {
+                const res = await fetch(API_URL, {
+                    headers: { 'x-api-key': inputKey }
+                });
+                
+                if (res.ok) {
+                    localStorage.setItem('gateway_api_key', inputKey);
+                    apiKey = inputKey;
+                    document.getElementById('auth-overlay').classList.add('hidden');
+                    startPolling();
+                } else {
+                    document.getElementById('auth-error').style.display = 'block';
+                    btn.innerHTML = 'Access Dashboard';
+                }
+            } catch (e) {
+                document.getElementById('auth-error').innerText = 'Connection failed';
+                document.getElementById('auth-error').style.display = 'block';
+                btn.innerHTML = 'Access Dashboard';
+            }
+        }
+
+        async function fetchMetrics() {
+            if (!apiKey) return;
+            
+            try {
+                const res = await fetch(API_URL, {
+                    headers: { 'x-api-key': apiKey }
+                });
+                
+                if (res.status === 401 || res.status === 403) {
+                    localStorage.removeItem('gateway_api_key');
+                    apiKey = null;
+                    document.getElementById('auth-overlay').classList.remove('hidden');
+                    clearInterval(pollInterval);
+                    return;
+                }
+                
+                const data = await res.json();
+                renderDashboard(data);
+                
+            } catch (e) {
+                console.error("Failed to fetch metrics", e);
+            }
+        }
+
+        function renderDashboard(data) {
+            // Update Header
+            document.getElementById('sys-info').innerHTML = `
+                <div class="sys-stat">
+                    <span style="color: var(--success); font-weight: bold;">●</span>
+                    Tunnel: ${data.tunnel_id || 'Active'}
+                </div>
+                <div class="sys-stat">
+                    Updated: ${new Date().toLocaleTimeString()}
+                </div>
+            `;
+
+            const content = document.getElementById('dashboard-content');
+            
+            if (Object.keys(data.services).length === 0) {
+                content.innerHTML = `<div class="empty-state">No services registered on this gateway yet.</div>`;
+                return;
+            }
+
+            let html = '';
+            
+            for (const [vmid, services] of Object.entries(data.services)) {
+                html += `
+                    <div class="vmid-group">
+                        <div class="vmid-header">
+                            LXC Container: <b>VMID ${vmid}</b>
+                        </div>
+                        <div class="grid">
+                `;
+                
+                for (const svc of services) {
+                    const metrics = svc.metrics || { requests: 0, bytesRx: 0, bytesTx: 0 };
+                    const latency = svc.latency > -1 ? `${svc.latency} ms` : '--';
+                    
+                    const rxFormatted = formatBytes(metrics.bytesRx).split(' ');
+                    const txFormatted = formatBytes(metrics.bytesTx).split(' ');
+                    
+                    html += `
+                        <div class="card">
+                            <div class="card-header">
+                                <div>
+                                    <h3 class="card-title">${svc.hostname.split('.')[0]}</h3>
+                                    <a href="${svc.url}" target="_blank" class="card-url">${svc.url}</a>
+                                </div>
+                                ${getStatusBadge(svc.status)}
+                            </div>
+                            
+                            <div class="target-tag">Target: ${svc.target} (${svc.mode})</div>
+                            
+                            <div class="metrics-grid">
+                                <div class="metric">
+                                    <span class="metric-label">Latency</span>
+                                    <span class="metric-value">${latency}</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Total Requests</span>
+                                    <span class="metric-value">${metrics.requests.toLocaleString()}</span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Data Received</span>
+                                    <span class="metric-value">
+                                        ${rxFormatted[0]} <span class="metric-unit">${rxFormatted[1]}</span>
+                                    </span>
+                                </div>
+                                <div class="metric">
+                                    <span class="metric-label">Data Sent</span>
+                                    <span class="metric-value">
+                                        ${txFormatted[0]} <span class="metric-unit">${txFormatted[1]}</span>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+                
+                html += `</div></div>`;
+            }
+            
+            content.innerHTML = html;
+        }
+
+        function startPolling() {
+            fetchMetrics();
+            pollInterval = setInterval(fetchMetrics, 5000);
+        }
+
+        // Init
+        if (apiKey) {
+            document.getElementById('auth-overlay').classList.add('hidden');
+            startPolling();
+        }
+    </script>
+</body>
+</html>

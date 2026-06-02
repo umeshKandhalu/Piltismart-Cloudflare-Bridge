@@ -48,7 +48,10 @@ if (fs.existsSync(STATE_FILE)) {
     try {
         const rawRoutes = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
         for (const [key, val] of Object.entries(rawRoutes)) {
-            routes[key.toLowerCase()] = val;
+            const lKey = key.toLowerCase();
+            routes[lKey] = val;
+            if (!routes[lKey].metrics) routes[lKey].metrics = { requests: 0, bytesRx: 0, bytesTx: 0 };
+            if (routes[lKey].latency === undefined) routes[lKey].latency = -1;
         }
         console.log(`[Gateway] Loaded ${Object.keys(routes).length} existing routes from persistent state.`);
     } catch (e) {
@@ -222,7 +225,9 @@ async function registerService(vmid, hostname, ip, exposeArray) {
             mode: item.mode,
             vmid: vmid,
             status: 'pending',
-            lastChecked: new Date().toISOString()
+            lastChecked: new Date().toISOString(),
+            latency: -1,
+            metrics: { requests: 0, bytesRx: 0, bytesTx: 0 }
         };
 
         await createDnsRecord(uniqueHostname);
@@ -250,7 +255,9 @@ setInterval(async () => {
     for (const [hostname, data] of Object.entries(routes)) {
         const [host, port] = data.target.split(':');
         if (host && port) {
+            const startPing = Date.now();
             const currentStatus = await pingTcp(host, parseInt(port));
+            const latencyMs = currentStatus === 'online' ? Date.now() - startPing : -1;
             
             // Self-Healing IP Tracking
             if (currentStatus === 'offline' && data.vmid && data.vmid !== 999) {
@@ -261,15 +268,19 @@ setInterval(async () => {
                         console.log(`[Self-Healing] IP Drift Detected for VMID ${data.vmid}! Healing: ${host} -> ${details.ip}`);
                         data.target = `${details.ip}:${port}`;
                         data.status = await pingTcp(details.ip, parseInt(port));
+                        data.latency = data.status === 'online' ? Date.now() - startPing : -1;
                         stateChanged = true;
                     } else {
                         data.status = 'offline';
+                        data.latency = -1;
                     }
                 } catch (e) {
                     data.status = 'offline';
+                    data.latency = -1;
                 }
             } else {
                 data.status = currentStatus;
+                data.latency = latencyMs;
             }
             
             data.lastChecked = new Date().toISOString();
@@ -631,6 +642,10 @@ proxyApp.get('/__login__', (req, res) => {
     res.sendFile(path.join(__dirname, 'login.html'));
 });
 
+adminApp.get('/dashboard', (req, res) => {
+    res.sendFile(path.join(__dirname, 'dashboard.html'));
+});
+
 proxyApp.post('/__auth__', express.urlencoded({ extended: true }), express.json(), async (req, res) => {
     const { username, password } = req.body;
     try {
@@ -648,6 +663,19 @@ proxyApp.use((req, res, next) => {
     if (!route) {
         return res.status(404).send("Service not registered in Gateway");
     }
+
+    route.metrics.requests++;
+    const rx = parseInt(req.headers['content-length'] || 0);
+    route.metrics.bytesRx += rx;
+    
+    const initialTx = req.socket ? req.socket.bytesWritten : 0;
+    res.on('finish', () => {
+        if (req.socket) {
+            const finalTx = req.socket.bytesWritten;
+            const diff = finalTx - initialTx;
+            if (diff > 0) route.metrics.bytesTx += diff;
+        }
+    });
 
     if (route.mode === 'private') {
         const token = req.query.token || req.headers['authorization'];
@@ -675,6 +703,12 @@ proxyServer.on('upgrade', (req, socket, head) => {
     const route = routes[host];
     
     if (route && (route.mode === 'public' || req.url.includes('token='))) {
+        route.metrics.requests++;
+        socket.on('close', () => {
+            route.metrics.bytesRx += socket.bytesRead || 0;
+            route.metrics.bytesTx += socket.bytesWritten || 0;
+        });
+
         const proxy = createProxyMiddleware({
             target: `http://${route.target}`,
             changeOrigin: true,
