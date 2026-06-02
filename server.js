@@ -26,8 +26,10 @@ const PVE_USER = process.env.PVE_USER;
 const PVE_PASSWORD = process.env.PVE_PASSWORD;
 const https = require('https');
 
-if (!CF_API_TOKEN || !CF_ACCOUNT_ID || !CF_ZONE_ID || !BASE_DOMAIN) {
-    console.error("[Gateway] Missing required environment variables: CF_API_TOKEN, CF_ACCOUNT_ID, CF_ZONE_ID, BASE_DOMAIN");
+const GATEWAY_API_KEY = process.env.GATEWAY_API_KEY;
+
+if (!CF_API_TOKEN || !CF_ACCOUNT_ID || !CF_ZONE_ID || !BASE_DOMAIN || !GATEWAY_API_KEY) {
+    console.error("[Gateway] Missing required environment variables: CF_API_TOKEN, CF_ACCOUNT_ID, CF_ZONE_ID, BASE_DOMAIN, GATEWAY_API_KEY");
     process.exit(1);
 }
 
@@ -254,11 +256,33 @@ setInterval(async () => {
 const adminApp = express();
 adminApp.use(express.json());
 
+adminApp.use((req, res, next) => {
+    // Exclude Swagger UI and related assets from authentication
+    if (req.path.startsWith('/docs') || req.path === '/favicon.ico') {
+        return next();
+    }
+    const apiKey = req.headers['x-api-key'] || req.query.api_key;
+    if (!apiKey || apiKey !== GATEWAY_API_KEY) {
+        return res.status(401).json({ error: "Unauthorized: Invalid or missing x-api-key" });
+    }
+    next();
+});
+
 const swaggerOptions = {
     swaggerDefinition: {
         openapi: '3.0.0',
         info: { title: 'PiltiSmart Gateway API', version: '1.0.0', description: 'Autonomous Gateway for Proxmox Cloudflare Tunnels' },
-        servers: [{ url: '/' }]
+        servers: [{ url: '/' }],
+        components: {
+            securitySchemes: {
+                ApiKeyAuth: {
+                    type: 'apiKey',
+                    in: 'header',
+                    name: 'x-api-key'
+                }
+            }
+        },
+        security: [{ ApiKeyAuth: [] }]
     },
     apis: ['server.js'],
 };
