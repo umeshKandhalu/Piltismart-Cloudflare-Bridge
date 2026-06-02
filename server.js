@@ -204,7 +204,7 @@ async function registerService(vmid, hostname, ip, exposeArray) {
 
     const generatedUrls = [];
     for (const item of exposeArray) {
-        const fullHostname = `${vmid}-${hostname}.${BASE_DOMAIN}`;
+        const fullHostname = `${PVE_NODE}-${vmid}-${hostname}.${BASE_DOMAIN}`;
         let prefix = 'p';
         if (item.mode === 'public') prefix = 'pb';
         else if (item.mode === 'private') prefix = 'pt';
