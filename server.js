@@ -203,11 +203,13 @@ async function updateTunnelIngress() {
     }
 }
 
-async function registerService(vmid, hostname, ip, exposeArray) {
-    // Clear old routes for this VMID from state to prevent ghost duplicates
-    for (const [existingHostname, data] of Object.entries(routes)) {
-        if (data.vmid === vmid) {
-            delete routes[existingHostname];
+async function registerService(vmid, hostname, ip, exposeArray, force = false) {
+    if (force) {
+        // Clear old routes for this VMID from state
+        for (const [existingHostname, data] of Object.entries(routes)) {
+            if (data.vmid === vmid) {
+                delete routes[existingHostname];
+            }
         }
     }
 
@@ -220,6 +222,10 @@ async function registerService(vmid, hostname, ip, exposeArray) {
         else if (item.mode === 'tcp') prefix = 'tcp';
         
         const uniqueHostname = `${prefix}${item.port}-${fullHostname}`;
+        
+        if (!force && routes[uniqueHostname]) {
+            throw new Error(`Route for port ${item.port} already exists (${uniqueHostname}). Please use Force Overwrite to replace it.`);
+        }
         
         routes[uniqueHostname] = {
             target: `${ip}:${item.port}`,
@@ -500,8 +506,39 @@ adminApp.post('/register', async (req, res) => {
         }
     }
 
-    const urls = await registerService(vmid, hostname, ip, expose);
-    res.json({ message: "Registered successfully", urls });
+    }
+
+    try {
+        const urls = await registerService(vmid, hostname, ip, expose, !!force);
+        res.json({ message: "Registered successfully", urls });
+    } catch (e) {
+        res.status(409).json({ error: e.message });
+    }
+});
+
+/**
+ * @swagger
+ * /discover/{vmid}:
+ *   get:
+ *     summary: Discover Proxmox container IP and Hostname
+ *     parameters:
+ *       - in: path
+ *         name: vmid
+ *         required: true
+ *         schema: { type: integer }
+ *     responses:
+ *       200: { description: "Container details" }
+ *       404: { description: "Container not found" }
+ */
+adminApp.get('/discover/:vmid', async (req, res) => {
+    const vmid = parseInt(req.params.vmid);
+    if (!vmid) return res.status(400).json({ error: "Invalid VMID" });
+    try {
+        const details = await discoverLxcDetails(vmid);
+        res.json(details);
+    } catch (e) {
+        res.status(404).json({ error: e.message });
+    }
 });
 
 /**

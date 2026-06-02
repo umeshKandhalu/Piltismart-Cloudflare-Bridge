@@ -373,6 +373,27 @@
         }
         .form-row > div { flex: 1; }
 
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        
+        .checkbox-group input {
+            width: auto;
+            accent-color: var(--danger);
+            transform: scale(1.2);
+            cursor: pointer;
+        }
+        
+        .checkbox-group label {
+            margin-bottom: 0;
+            color: var(--text-muted);
+            cursor: pointer;
+        }
+
         .modal-btn {
             width: 100%;
             background: var(--accent);
@@ -435,7 +456,7 @@
             <form id="register-form" onsubmit="submitRegister(event)">
                 <div class="input-group">
                     <label>Proxmox VMID</label>
-                    <input type="number" id="reg-vmid" required placeholder="e.g. 101">
+                    <input type="number" id="reg-vmid" required placeholder="e.g. 101" onblur="autoDiscover()">
                 </div>
                 
                 <div class="input-group">
@@ -461,6 +482,10 @@
                             <option value="tcp">TCP (Raw)</option>
                         </select>
                     </div>
+                </div>
+                <div class="checkbox-group">
+                    <input type="checkbox" id="reg-force">
+                    <label for="reg-force">Force Overwrite (Warning: clears old routes for this VMID)</label>
                 </div>
                 
                 <button type="submit" class="modal-btn" id="reg-btn">Register Route</button>
@@ -563,6 +588,25 @@
             document.getElementById('register-form').reset();
         }
         
+        async function autoDiscover() {
+            const vmid = document.getElementById('reg-vmid').value;
+            if (!vmid || !apiKey) return;
+            
+            const hostInput = document.getElementById('reg-hostname');
+            const ipInput = document.getElementById('reg-ip');
+            
+            try {
+                const res = await fetch(`/discover/${vmid}`, { headers: { 'x-api-key': apiKey } });
+                if (res.ok) {
+                    const details = await res.json();
+                    hostInput.value = details.hostname;
+                    ipInput.value = details.ip;
+                }
+            } catch(e) {
+                console.error("Auto discover failed");
+            }
+        }
+        
         async function submitRegister(e) {
             e.preventDefault();
             const btn = document.getElementById('reg-btn');
@@ -573,6 +617,7 @@
                 vmid: parseInt(document.getElementById('reg-vmid').value),
                 hostname: document.getElementById('reg-hostname').value,
                 ip: document.getElementById('reg-ip').value,
+                force: document.getElementById('reg-force').checked,
                 expose: [{
                     port: parseInt(document.getElementById('reg-port').value),
                     mode: document.getElementById('reg-mode').value
