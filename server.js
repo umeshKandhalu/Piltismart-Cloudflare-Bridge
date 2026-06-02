@@ -52,6 +52,16 @@ if (fs.existsSync(STATE_FILE)) {
         console.error("[Gateway] Failed to parse existing state file. Starting fresh.");
     }
 }
+
+// Ensure the Gateway always self-registers its Admin UI
+const adminHostname = `admin-${PVE_NODE || 'gateway'}.${BASE_DOMAIN}`;
+routes[adminHostname] = {
+    target: `localhost:${ADMIN_PORT}`,
+    mode: 'public',
+    vmid: 999,
+    status: 'online',
+    lastChecked: new Date().toISOString()
+};
 function saveState() {
     fs.writeFileSync(STATE_FILE, JSON.stringify(routes, null, 2));
 }
