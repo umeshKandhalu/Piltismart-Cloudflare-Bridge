@@ -692,7 +692,7 @@ proxyServer.on('upgrade', (req, socket, head) => {
 
     await setupAutonomousTunnel();
     
-    const adminHostname = `admin-${PVE_NODE || 'gateway'}.${BASE_DOMAIN}`;
+    const adminHostname = `admin-${PVE_NODE || 'proxmox'}-gateway.${BASE_DOMAIN}`;
     if (!routes[adminHostname]) {
         console.log(`[Gateway] Auto-registering Admin API at ${adminHostname}`);
         try {
