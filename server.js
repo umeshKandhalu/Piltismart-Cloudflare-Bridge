@@ -275,7 +275,7 @@ setInterval(async () => {
     
     if (stateChanged) {
         saveState();
-        updateCloudflareConfig();
+        await updateTunnelIngress();
     }
 }, 15000);
 
@@ -705,7 +705,7 @@ proxyServer.on('upgrade', (req, socket, head) => {
                 lastChecked: new Date().toISOString()
             };
             saveState();
-            await updateCloudflareConfig();
+            await updateTunnelIngress();
         } catch (e) {
             console.error("[Gateway] Failed to auto-register Admin API:", e.message);
         }
