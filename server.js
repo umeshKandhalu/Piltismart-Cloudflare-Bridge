@@ -52,16 +52,6 @@ if (fs.existsSync(STATE_FILE)) {
         console.error("[Gateway] Failed to parse existing state file. Starting fresh.");
     }
 }
-
-// Ensure the Gateway always self-registers its Admin UI
-const adminHostname = `admin-${PVE_NODE || 'gateway'}.${BASE_DOMAIN}`;
-routes[adminHostname] = {
-    target: `localhost:${ADMIN_PORT}`,
-    mode: 'public',
-    vmid: 999,
-    status: 'online',
-    lastChecked: new Date().toISOString()
-};
 function saveState() {
     fs.writeFileSync(STATE_FILE, JSON.stringify(routes, null, 2));
 }
@@ -696,6 +686,31 @@ proxyServer.on('upgrade', (req, socket, head) => {
 
 // --- INIT ---
 (async () => {
+    console.log("=========================================================");
+    console.log(" PiltiSmart Cloudflare Gateway - Proxmox Ingress Controller");
+    console.log("=========================================================");
+
     await setupAutonomousTunnel();
+    
+    const adminHostname = `admin-${PVE_NODE || 'gateway'}.${BASE_DOMAIN}`;
+    if (!routes[adminHostname]) {
+        console.log(`[Gateway] Auto-registering Admin API at ${adminHostname}`);
+        try {
+            await createCnameRecord(adminHostname);
+            routes[adminHostname] = {
+                target: `localhost:${ADMIN_PORT}`,
+                mode: 'public',
+                vmid: 999,
+                status: 'online',
+                lastChecked: new Date().toISOString()
+            };
+            saveState();
+            await updateCloudflareConfig();
+        } catch (e) {
+            console.error("[Gateway] Failed to auto-register Admin API:", e.message);
+        }
+    }
+
+    console.log("Starting Autonomous Gateway Manager...");
     startCloudflared();
 })();
