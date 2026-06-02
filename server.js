@@ -298,8 +298,8 @@ const adminApp = express();
 adminApp.use(express.json());
 
 adminApp.use((req, res, next) => {
-    // Exclude Swagger UI and related assets from authentication
-    if (req.path.startsWith('/docs') || req.path === '/favicon.ico') {
+    // Exclude Swagger UI, Dashboard UI, and related assets from authentication
+    if (req.path.startsWith('/docs') || req.path.startsWith('/dashboard') || req.path === '/favicon.ico') {
         return next();
     }
     const apiKey = req.headers['x-api-key'] || req.query.api_key;
