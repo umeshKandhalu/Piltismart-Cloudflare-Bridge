@@ -126,6 +126,25 @@
             width: 18px;
             height: 18px;
         }
+        
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary:hover { background: #2563eb; }
+        .btn-primary:active { transform: scale(0.98); }
 
         /* Table */
         .table-container {
@@ -141,7 +160,7 @@
             width: 100%;
             border-collapse: collapse;
             text-align: left;
-            min-width: 1000px;
+            min-width: 1100px;
         }
 
         th {
@@ -156,6 +175,7 @@
             user-select: none;
             transition: color 0.2s, background 0.2s;
             position: relative;
+            white-space: nowrap;
         }
 
         th:hover {
@@ -163,15 +183,11 @@
             background: rgba(255, 255, 255, 0.05);
         }
 
-        th.sort-asc::after {
-            content: " ↑";
-            color: var(--accent);
-        }
-        
-        th.sort-desc::after {
-            content: " ↓";
-            color: var(--accent);
-        }
+        th.sort-asc::after { content: " ↑"; color: var(--accent); }
+        th.sort-desc::after { content: " ↓"; color: var(--accent); }
+        th.no-sort { cursor: default; }
+        th.no-sort:hover { background: transparent; color: var(--text-muted); }
+        th.no-sort::after { content: ""; }
 
         td {
             padding: 1rem 1.2rem;
@@ -218,35 +234,10 @@
             color: var(--success);
             border: 1px solid rgba(16, 185, 129, 0.2);
         }
-
-        .status-online::before {
-            content: "";
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--success);
-            box-shadow: 0 0 8px var(--success);
-        }
-
-        .status-offline {
-            background: rgba(239, 68, 68, 0.1);
-            color: var(--danger);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-        }
-
-        .status-offline::before {
-            content: "";
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-            background: var(--danger);
-        }
-
-        .status-pending {
-            background: rgba(245, 158, 11, 0.1);
-            color: var(--warning);
-            border: 1px solid rgba(245, 158, 11, 0.2);
-        }
+        .status-online::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success); }
+        .status-offline { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
+        .status-offline::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--danger); }
+        .status-pending { background: rgba(245, 158, 11, 0.1); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.2); }
 
         .target-tag {
             display: inline-block;
@@ -256,6 +247,12 @@
             font-family: monospace;
             font-size: 0.85rem;
             color: var(--text-muted);
+        }
+        
+        .date-tag {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            white-space: nowrap;
         }
 
         .metric-value {
@@ -268,9 +265,30 @@
             color: var(--text-muted);
             font-family: 'Outfit', sans-serif;
         }
+        
+        .btn-icon {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .btn-icon:hover {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .btn-icon svg { width: 16px; height: 16px; }
 
         /* Modal */
-        #auth-overlay {
+        .overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(0, 0, 0, 0.8);
@@ -288,37 +306,74 @@
             border-radius: 20px;
             padding: 2.5rem;
             width: 100%;
-            max-width: 400px;
+            max-width: 450px;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            text-align: center;
+            position: relative;
         }
+        
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.5rem;
+            cursor: pointer;
+            width: 30px;
+            height: 30px;
+            padding: 0;
+        }
+        .modal-close:hover { color: white; }
 
         .modal h2 {
-            margin-top: 0; margin-bottom: 1.5rem; font-weight: 500;
+            margin-top: 0; margin-bottom: 1.5rem; font-weight: 500; text-align: center;
         }
 
         .input-group {
-            position: relative; margin-bottom: 1.5rem;
+            position: relative; margin-bottom: 1.2rem;
+        }
+        
+        .input-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 500;
         }
 
-        .input-group input {
+        .input-group input, .input-group select {
             width: 100%;
             background: rgba(0, 0, 0, 0.2);
             border: 1px solid var(--card-border);
-            padding: 12px 16px;
+            padding: 10px 14px;
             border-radius: 10px;
             color: white;
             font-family: 'Outfit', sans-serif;
-            font-size: 1rem;
+            font-size: 0.95rem;
             outline: none;
         }
         
-        .input-group input:focus {
+        .input-group select {
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%239ca3af%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E");
+            background-repeat: no-repeat;
+            background-position: right 14px top 50%;
+            background-size: 10px auto;
+        }
+        
+        .input-group input:focus, .input-group select:focus {
             border-color: var(--accent);
             box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
         }
+        
+        .form-row {
+            display: flex;
+            gap: 1rem;
+        }
+        .form-row > div { flex: 1; }
 
-        button {
+        .modal-btn {
             width: 100%;
             background: var(--accent);
             color: white;
@@ -329,11 +384,9 @@
             font-size: 1rem;
             font-weight: 600;
             cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
+            margin-top: 10px;
         }
-
-        button:hover { background: #2563eb; }
-        button:active { transform: scale(0.98); }
+        .modal-btn:hover { background: #2563eb; }
 
         .error-msg {
             color: var(--danger);
@@ -341,6 +394,7 @@
             margin-top: -10px;
             margin-bottom: 15px;
             display: none;
+            text-align: center;
         }
 
         .loader {
@@ -352,17 +406,14 @@
             animation: spin 1s ease-in-out infinite;
         }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
+        @keyframes spin { to { transform: rotate(360deg); } }
         .hidden { opacity: 0; pointer-events: none; }
         .empty-state { text-align: center; padding: 4rem; color: var(--text-muted); }
     </style>
 </head>
 <body>
 
-    <div id="auth-overlay">
+    <div id="auth-overlay" class="overlay">
         <div class="modal">
             <div class="logo-icon" style="margin: 0 auto 1.5rem auto; width: 48px; height: 48px;"></div>
             <h2>Gateway Authentication</h2>
@@ -371,7 +422,49 @@
             <div class="input-group">
                 <input type="password" id="api-key" placeholder="GATEWAY_API_KEY" onkeydown="if(event.key === 'Enter') authenticate()">
             </div>
-            <button onclick="authenticate()" id="auth-btn">Access Dashboard</button>
+            <button class="modal-btn" onclick="authenticate()" id="auth-btn">Access Dashboard</button>
+        </div>
+    </div>
+    
+    <div id="register-overlay" class="overlay hidden">
+        <div class="modal">
+            <button class="modal-close" onclick="closeRegister()">&times;</button>
+            <h2>Register Service</h2>
+            <div class="error-msg" id="reg-error">Failed to register</div>
+            
+            <form id="register-form" onsubmit="submitRegister(event)">
+                <div class="input-group">
+                    <label>Proxmox VMID</label>
+                    <input type="number" id="reg-vmid" required placeholder="e.g. 101">
+                </div>
+                
+                <div class="input-group">
+                    <label>Hostname / Prefix</label>
+                    <input type="text" id="reg-hostname" required placeholder="e.g. ollama">
+                </div>
+                
+                <div class="input-group">
+                    <label>Target Container IP</label>
+                    <input type="text" id="reg-ip" required placeholder="e.g. 192.168.0.28">
+                </div>
+                
+                <div class="form-row">
+                    <div class="input-group">
+                        <label>Port</label>
+                        <input type="number" id="reg-port" required placeholder="80">
+                    </div>
+                    <div class="input-group">
+                        <label>Access Mode</label>
+                        <select id="reg-mode" required>
+                            <option value="public">Public</option>
+                            <option value="private">Private (Auth)</option>
+                            <option value="tcp">TCP (Raw)</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <button type="submit" class="modal-btn" id="reg-btn">Register Route</button>
+            </form>
         </div>
     </div>
 
@@ -391,6 +484,11 @@
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                 <input type="text" id="search-input" placeholder="Search by hostname, vmid, target..." onkeyup="renderDashboard()">
             </div>
+            
+            <button class="btn-primary" onclick="openRegister()">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                Add Service
+            </button>
         </div>
 
         <div id="dashboard-content">
@@ -402,14 +500,15 @@
     </div>
 
     <script>
-        const API_URL = '/services';
+        const API_URL_SERVICES = '/services';
+        const API_URL_REGISTER = '/register';
         let apiKey = localStorage.getItem('gateway_api_key');
         let pollInterval;
         
         // Data State
         let cachedServices = [];
-        let sortCol = 'vmid';
-        let sortAsc = true;
+        let sortCol = 'createdAt';
+        let sortAsc = false;
 
         function formatBytes(bytes, decimals = 2) {
             if (!+bytes) return '0.00 <span class="metric-unit">B</span>';
@@ -425,6 +524,12 @@
             if (status === 'offline') return `<span class="status-badge status-offline">Offline</span>`;
             return `<span class="status-badge status-pending">Pending</span>`;
         }
+        
+        function formatDate(isoString) {
+            if (!isoString) return '--';
+            const d = new Date(isoString);
+            return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute:'2-digit' });
+        }
 
         async function authenticate() {
             const inputKey = document.getElementById('api-key').value;
@@ -434,7 +539,7 @@
             btn.innerHTML = '<div class="loader"></div>';
             
             try {
-                const res = await fetch(API_URL, { headers: { 'x-api-key': inputKey } });
+                const res = await fetch(API_URL_SERVICES, { headers: { 'x-api-key': inputKey } });
                 if (res.ok) {
                     localStorage.setItem('gateway_api_key', inputKey);
                     apiKey = inputKey;
@@ -450,11 +555,76 @@
                 btn.innerHTML = 'Access Dashboard';
             }
         }
+        
+        function openRegister() { document.getElementById('register-overlay').classList.remove('hidden'); }
+        function closeRegister() { 
+            document.getElementById('register-overlay').classList.add('hidden');
+            document.getElementById('reg-error').style.display = 'none';
+            document.getElementById('register-form').reset();
+        }
+        
+        async function submitRegister(e) {
+            e.preventDefault();
+            const btn = document.getElementById('reg-btn');
+            const ogText = btn.innerText;
+            btn.innerHTML = '<div class="loader"></div>';
+            
+            const payload = {
+                vmid: parseInt(document.getElementById('reg-vmid').value),
+                hostname: document.getElementById('reg-hostname').value,
+                ip: document.getElementById('reg-ip').value,
+                expose: [{
+                    port: parseInt(document.getElementById('reg-port').value),
+                    mode: document.getElementById('reg-mode').value
+                }]
+            };
+            
+            try {
+                const res = await fetch(API_URL_REGISTER, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (res.ok) {
+                    closeRegister();
+                    fetchMetrics(); // instant refresh
+                } else {
+                    const err = await res.json();
+                    document.getElementById('reg-error').innerText = err.error || 'Failed to register';
+                    document.getElementById('reg-error').style.display = 'block';
+                }
+            } catch (err) {
+                document.getElementById('reg-error').innerText = 'Connection error';
+                document.getElementById('reg-error').style.display = 'block';
+            }
+            btn.innerHTML = ogText;
+        }
+        
+        async function deleteService(vmid, port, mode) {
+            if (!confirm(`Are you sure you want to delete this route? (VMID ${vmid}, Port ${port})`)) return;
+            
+            try {
+                const res = await fetch(API_URL_SERVICES, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+                    body: JSON.stringify({ vmid: parseInt(vmid), port: parseInt(port), mode: mode })
+                });
+                
+                if (res.ok) {
+                    fetchMetrics();
+                } else {
+                    alert("Failed to delete service.");
+                }
+            } catch (e) {
+                alert("Connection error.");
+            }
+        }
 
         async function fetchMetrics() {
             if (!apiKey) return;
             try {
-                const res = await fetch(API_URL, { headers: { 'x-api-key': apiKey } });
+                const res = await fetch(API_URL_SERVICES, { headers: { 'x-api-key': apiKey } });
                 if (res.status === 401 || res.status === 403) {
                     localStorage.removeItem('gateway_api_key');
                     apiKey = null;
@@ -470,19 +640,19 @@
         }
 
         function processData(data) {
-            // Update Header
             document.getElementById('sys-info').innerHTML = `
                 <div class="sys-stat"><span style="color: var(--success); font-weight: bold;">●</span> Tunnel: ${data.tunnel_id || 'Active'}</div>
                 <div class="sys-stat">Updated: ${new Date().toLocaleTimeString()}</div>
             `;
 
-            // Flatten data
             let flattened = [];
             for (const [vmid, services] of Object.entries(data.services)) {
                 for (const svc of services) {
+                    const portStr = svc.target.split(':')[1];
                     flattened.push({
                         ...svc,
                         vmid: parseInt(vmid),
+                        port: parseInt(portStr),
                         requests: svc.metrics ? svc.metrics.requests : 0,
                         bytesRx: svc.metrics ? svc.metrics.bytesRx : 0,
                         bytesTx: svc.metrics ? svc.metrics.bytesTx : 0
@@ -517,7 +687,6 @@
 
             const query = document.getElementById('search-input').value.toLowerCase();
             
-            // Filter
             let filtered = cachedServices.filter(svc => {
                 return String(svc.vmid).includes(query) || 
                        svc.hostname.toLowerCase().includes(query) ||
@@ -526,7 +695,6 @@
                        svc.status.toLowerCase().includes(query);
             });
 
-            // Sort
             filtered.sort((a, b) => {
                 let valA = a[sortCol];
                 let valB = b[sortCol];
@@ -551,8 +719,9 @@
                                 <th onclick="setSort('mode')" class="${getSortClass('mode')}">Mode</th>
                                 <th onclick="setSort('latency')" class="${getSortClass('latency')}">Latency</th>
                                 <th onclick="setSort('requests')" class="${getSortClass('requests')}">Requests</th>
-                                <th onclick="setSort('bytesRx')" class="${getSortClass('bytesRx')}">Data Rx</th>
                                 <th onclick="setSort('bytesTx')" class="${getSortClass('bytesTx')}">Data Tx</th>
+                                <th onclick="setSort('createdAt')" class="${getSortClass('createdAt')}">Date Added</th>
+                                <th class="no-sort" style="width:60px;">Action</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -570,8 +739,13 @@
                         <td style="text-transform: capitalize;">${svc.mode}</td>
                         <td class="metric-value">${latencyStr}</td>
                         <td class="metric-value">${svc.requests.toLocaleString()}</td>
-                        <td class="metric-value">${formatBytes(svc.bytesRx)}</td>
                         <td class="metric-value">${formatBytes(svc.bytesTx)}</td>
+                        <td class="date-tag">${formatDate(svc.createdAt)}</td>
+                        <td>
+                            <button class="btn-icon" onclick="deleteService(${svc.vmid}, ${svc.port}, '${svc.mode}')" title="Delete Route">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </td>
                     </tr>
                 `;
             }

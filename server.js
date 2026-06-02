@@ -52,6 +52,7 @@ if (fs.existsSync(STATE_FILE)) {
             routes[lKey] = val;
             if (!routes[lKey].metrics) routes[lKey].metrics = { requests: 0, bytesRx: 0, bytesTx: 0 };
             if (routes[lKey].latency === undefined) routes[lKey].latency = -1;
+            if (!routes[lKey].createdAt) routes[lKey].createdAt = new Date().toISOString();
         }
         console.log(`[Gateway] Loaded ${Object.keys(routes).length} existing routes from persistent state.`);
     } catch (e) {
@@ -226,6 +227,7 @@ async function registerService(vmid, hostname, ip, exposeArray) {
             vmid: vmid,
             status: 'pending',
             lastChecked: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
             latency: -1,
             metrics: { requests: 0, bytesRx: 0, bytesTx: 0 }
         };
