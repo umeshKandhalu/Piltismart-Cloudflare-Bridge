@@ -624,9 +624,16 @@ adminApp.delete('/services', async (req, res) => {
 
     let deletedCount = 0;
     const hostnamesToDelete = [];
+    const adminHostname = `admin-${PVE_NODE || 'proxmox'}-gateway.${BASE_DOMAIN}`;
 
     for (const [hostname, data] of Object.entries(routes)) {
         if (data.vmid !== vmid) continue;
+        
+        // Protect the active gateway dashboard from deletion!
+        if (hostname === adminHostname) {
+            console.log(`[Gateway] Prevented deletion of critical gateway route: ${hostname}`);
+            continue;
+        }
         
         if (port) {
             const dataPort = parseInt(data.target.split(':')[1]);
