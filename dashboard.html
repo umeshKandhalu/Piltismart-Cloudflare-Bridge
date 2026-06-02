@@ -138,13 +138,56 @@
             font-weight: 600;
             cursor: pointer;
             transition: background 0.2s, transform 0.1s;
-            display: flex;
+            display: inline-flex;
             align-items: center;
             gap: 8px;
         }
         
         .btn-primary:hover { background: #2563eb; }
         .btn-primary:active { transform: scale(0.98); }
+        
+        .btn-sm {
+            padding: 6px 14px;
+            font-size: 0.85rem;
+            border-radius: 8px;
+        }
+        
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        
+        .btn-danger:hover {
+            background: var(--danger);
+            color: white;
+        }
+
+        /* Grouped View */
+        .vmid-group {
+            margin-bottom: 3rem;
+        }
+
+        .vmid-header {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .vmid-header::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: var(--card-border);
+        }
+
+        .vmid-header-actions {
+            display: flex;
+            gap: 10px;
+        }
 
         /* Table */
         .table-container {
@@ -160,7 +203,7 @@
             width: 100%;
             border-collapse: collapse;
             text-align: left;
-            min-width: 1100px;
+            min-width: 1000px;
         }
 
         th {
@@ -196,13 +239,8 @@
             vertical-align: middle;
         }
 
-        tr:last-child td {
-            border-bottom: none;
-        }
-
-        tr:hover td {
-            background: rgba(255, 255, 255, 0.02);
-        }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
         .card-url {
             color: var(--accent);
@@ -212,10 +250,7 @@
             word-break: break-all;
         }
         
-        .card-url:hover {
-            opacity: 1;
-            text-decoration: underline;
-        }
+        .card-url:hover { opacity: 1; text-decoration: underline; }
 
         .status-badge {
             padding: 4px 10px;
@@ -229,11 +264,7 @@
             gap: 6px;
         }
 
-        .status-online {
-            background: rgba(16, 185, 129, 0.1);
-            color: var(--success);
-            border: 1px solid rgba(16, 185, 129, 0.2);
-        }
+        .status-online { background: rgba(16, 185, 129, 0.1); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.2); }
         .status-online::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success); }
         .status-offline { background: rgba(239, 68, 68, 0.1); color: var(--danger); border: 1px solid rgba(239, 68, 68, 0.2); }
         .status-offline::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--danger); }
@@ -255,16 +286,8 @@
             white-space: nowrap;
         }
 
-        .metric-value {
-            font-family: monospace;
-            font-size: 0.95rem;
-        }
-        
-        .metric-unit {
-            font-size: 0.8rem;
-            color: var(--text-muted);
-            font-family: 'Outfit', sans-serif;
-        }
+        .metric-value { font-family: monospace; font-size: 0.95rem; }
+        .metric-unit { font-size: 0.8rem; color: var(--text-muted); font-family: 'Outfit', sans-serif; }
         
         .btn-icon {
             background: rgba(239, 68, 68, 0.1);
@@ -280,11 +303,7 @@
             transition: all 0.2s;
         }
         
-        .btn-icon:hover {
-            background: var(--danger);
-            color: white;
-        }
-        
+        .btn-icon:hover { background: var(--danger); color: white; }
         .btn-icon svg { width: 16px; height: 16px; }
 
         /* Modal */
@@ -326,22 +345,10 @@
         }
         .modal-close:hover { color: white; }
 
-        .modal h2 {
-            margin-top: 0; margin-bottom: 1.5rem; font-weight: 500; text-align: center;
-        }
+        .modal h2 { margin-top: 0; margin-bottom: 1.5rem; font-weight: 500; text-align: center; }
 
-        .input-group {
-            position: relative; margin-bottom: 1.2rem;
-        }
-        
-        .input-group label {
-            display: block;
-            margin-bottom: 6px;
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            font-weight: 500;
-        }
-
+        .input-group { position: relative; margin-bottom: 1.2rem; }
+        .input-group label { display: block; margin-bottom: 6px; font-size: 0.85rem; color: var(--text-muted); font-weight: 500; }
         .input-group input, .input-group select {
             width: 100%;
             background: rgba(0, 0, 0, 0.2);
@@ -367,10 +374,7 @@
             box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
         }
         
-        .form-row {
-            display: flex;
-            gap: 1rem;
-        }
+        .form-row { display: flex; gap: 1rem; }
         .form-row > div { flex: 1; }
 
         .checkbox-group {
@@ -507,12 +511,12 @@
         <div class="controls-bar">
             <div class="search-box">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                <input type="text" id="search-input" placeholder="Search by hostname, vmid, target..." onkeyup="renderDashboard()">
+                <input type="text" id="search-input" placeholder="Search by hostname, target, mode..." onkeyup="renderDashboard()">
             </div>
             
             <button class="btn-primary" onclick="openRegister()">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                Add Service
+                Add Global Route
             </button>
         </div>
 
@@ -581,7 +585,14 @@
             }
         }
         
-        function openRegister() { document.getElementById('register-overlay').classList.remove('hidden'); }
+        function openRegister(vmid = '') { 
+            document.getElementById('register-overlay').classList.remove('hidden');
+            if (vmid) {
+                document.getElementById('reg-vmid').value = vmid;
+                autoDiscover();
+            }
+        }
+        
         function closeRegister() { 
             document.getElementById('register-overlay').classList.add('hidden');
             document.getElementById('reg-error').style.display = 'none';
@@ -648,22 +659,28 @@
         
         async function deleteService(vmid, port, mode) {
             if (!confirm(`Are you sure you want to delete this route? (VMID ${vmid}, Port ${port})`)) return;
-            
             try {
                 const res = await fetch(API_URL_SERVICES, {
                     method: 'DELETE',
                     headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
                     body: JSON.stringify({ vmid: parseInt(vmid), port: parseInt(port), mode: mode })
                 });
-                
-                if (res.ok) {
-                    fetchMetrics();
-                } else {
-                    alert("Failed to delete service.");
-                }
-            } catch (e) {
-                alert("Connection error.");
-            }
+                if (res.ok) fetchMetrics();
+                else alert("Failed to delete service.");
+            } catch (e) { alert("Connection error."); }
+        }
+        
+        async function deleteContainer(vmid) {
+            if (!confirm(`⚠️ DANGER: Are you sure you want to completely wipe ALL routes for VMID ${vmid}?`)) return;
+            try {
+                const res = await fetch(API_URL_SERVICES, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+                    body: JSON.stringify({ vmid: parseInt(vmid) })
+                });
+                if (res.ok) fetchMetrics();
+                else alert("Failed to delete container routes.");
+            } catch (e) { alert("Connection error."); }
         }
 
         async function fetchMetrics() {
@@ -751,55 +768,84 @@
                 if (valA > valB) return sortAsc ? 1 : -1;
                 return 0;
             });
-
-            let html = `
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th onclick="setSort('status')" class="${getSortClass('status')}">Status</th>
-                                <th onclick="setSort('vmid')" class="${getSortClass('vmid')}">VMID</th>
-                                <th onclick="setSort('hostname')" class="${getSortClass('hostname')}">Hostname</th>
-                                <th onclick="setSort('target')" class="${getSortClass('target')}">Target</th>
-                                <th onclick="setSort('mode')" class="${getSortClass('mode')}">Mode</th>
-                                <th onclick="setSort('latency')" class="${getSortClass('latency')}">Latency</th>
-                                <th onclick="setSort('requests')" class="${getSortClass('requests')}">Requests</th>
-                                <th onclick="setSort('bytesTx')" class="${getSortClass('bytesTx')}">Data Tx</th>
-                                <th onclick="setSort('createdAt')" class="${getSortClass('createdAt')}">Date Added</th>
-                                <th class="no-sort" style="width:60px;">Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            `;
-
+            
+            // Group by VMID
+            const grouped = {};
             for (const svc of filtered) {
-                const latencyStr = svc.latency > -1 ? `${svc.latency} <span class="metric-unit">ms</span>` : '--';
-                
-                html += `
-                    <tr>
-                        <td>${getStatusBadge(svc.status)}</td>
-                        <td><b>${svc.vmid}</b></td>
-                        <td><a href="${svc.url}" target="_blank" class="card-url">${svc.hostname}</a></td>
-                        <td><span class="target-tag">${svc.target}</span></td>
-                        <td style="text-transform: capitalize;">${svc.mode}</td>
-                        <td class="metric-value">${latencyStr}</td>
-                        <td class="metric-value">${svc.requests.toLocaleString()}</td>
-                        <td class="metric-value">${formatBytes(svc.bytesTx)}</td>
-                        <td class="date-tag">${formatDate(svc.createdAt)}</td>
-                        <td>
-                            <button class="btn-icon" onclick="deleteService(${svc.vmid}, ${svc.port}, '${svc.mode}')" title="Delete Route">
-                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
-                            </button>
-                        </td>
-                    </tr>
-                `;
+                if (!grouped[svc.vmid]) grouped[svc.vmid] = [];
+                grouped[svc.vmid].push(svc);
             }
 
-            html += `
-                        </tbody>
-                    </table>
-                </div>
-            `;
+            let html = '';
+            
+            // Render each VMID group
+            const vmidKeys = Object.keys(grouped).sort((a, b) => parseInt(a) - parseInt(b));
+            
+            for (const vmid of vmidKeys) {
+                const svcs = grouped[vmid];
+                
+                html += `
+                    <div class="vmid-group">
+                        <div class="vmid-header">
+                            <span>LXC Container: <b>VMID ${vmid}</b></span>
+                            <div class="vmid-header-actions">
+                                <button class="btn-primary btn-sm" onclick="openRegister(${vmid})">
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                                    Add Route
+                                </button>
+                                <button class="btn-primary btn-sm btn-danger" onclick="deleteContainer(${vmid})" title="Wipe all routes for this container">
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                    Delete All
+                                </button>
+                            </div>
+                        </div>
+                        <div class="table-container">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th onclick="setSort('status')" class="${getSortClass('status')}">Status</th>
+                                        <th onclick="setSort('hostname')" class="${getSortClass('hostname')}">Hostname</th>
+                                        <th onclick="setSort('target')" class="${getSortClass('target')}">Target</th>
+                                        <th onclick="setSort('mode')" class="${getSortClass('mode')}">Mode</th>
+                                        <th onclick="setSort('latency')" class="${getSortClass('latency')}">Latency</th>
+                                        <th onclick="setSort('requests')" class="${getSortClass('requests')}">Requests</th>
+                                        <th onclick="setSort('bytesTx')" class="${getSortClass('bytesTx')}">Data Tx</th>
+                                        <th onclick="setSort('createdAt')" class="${getSortClass('createdAt')}">Date Added</th>
+                                        <th class="no-sort" style="width:60px;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                `;
+
+                for (const svc of svcs) {
+                    const latencyStr = svc.latency > -1 ? `${svc.latency} <span class="metric-unit">ms</span>` : '--';
+                    
+                    html += `
+                        <tr>
+                            <td>${getStatusBadge(svc.status)}</td>
+                            <td><a href="${svc.url}" target="_blank" class="card-url">${svc.hostname}</a></td>
+                            <td><span class="target-tag">${svc.target}</span></td>
+                            <td style="text-transform: capitalize;">${svc.mode}</td>
+                            <td class="metric-value">${latencyStr}</td>
+                            <td class="metric-value">${svc.requests.toLocaleString()}</td>
+                            <td class="metric-value">${formatBytes(svc.bytesTx)}</td>
+                            <td class="date-tag">${formatDate(svc.createdAt)}</td>
+                            <td>
+                                <button class="btn-icon" onclick="deleteService(${svc.vmid}, ${svc.port}, '${svc.mode}')" title="Delete Route">
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }
+
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
             
             content.innerHTML = html;
         }
