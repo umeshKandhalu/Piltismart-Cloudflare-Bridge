@@ -458,25 +458,12 @@ async function discoverLxcDetails(vmid) {
  *       500: { description: "Auto-discovery failed" }
  */
 adminApp.post('/register', async (req, res) => {
-    let { vmid, hostname, ip, expose, override } = req.body;
+    let { vmid, hostname, ip, expose, force } = req.body;
     
     // Strict Payload Validation
     if (!vmid || typeof vmid !== 'number' || vmid <= 0) {
         return res.status(400).json({ error: "Invalid payload: 'vmid' must be a positive integer." });
     }
-    
-    let existingVmid = false;
-    for (const data of Object.values(routes)) {
-        if (data.vmid === vmid) {
-            existingVmid = true;
-            break;
-        }
-    }
-
-    if (existingVmid && !override) {
-        return res.status(409).json({ error: `VMID ${vmid} already has registered URLs. Pass "override": true in the payload to recreate them.` });
-    }
-
     if (!expose || !Array.isArray(expose) || expose.length === 0) {
         return res.status(400).json({ error: "Invalid payload: 'expose' must be a non-empty array." });
     }
