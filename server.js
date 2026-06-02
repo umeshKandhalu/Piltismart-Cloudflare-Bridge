@@ -46,7 +46,10 @@ const STATE_FILE = path.join(DATA_DIR, 'state.json');
 let routes = {}; // hostname -> { target, mode, vmid, status, lastChecked }
 if (fs.existsSync(STATE_FILE)) {
     try {
-        routes = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        const rawRoutes = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        for (const [key, val] of Object.entries(rawRoutes)) {
+            routes[key.toLowerCase()] = val;
+        }
         console.log(`[Gateway] Loaded ${Object.keys(routes).length} existing routes from persistent state.`);
     } catch (e) {
         console.error("[Gateway] Failed to parse existing state file. Starting fresh.");
@@ -206,7 +209,7 @@ async function registerService(vmid, hostname, ip, exposeArray) {
 
     const generatedUrls = [];
     for (const item of exposeArray) {
-        const fullHostname = `${PVE_NODE}-${vmid}-${hostname}.${BASE_DOMAIN}`;
+        const fullHostname = `${PVE_NODE}-${vmid}-${hostname}.${BASE_DOMAIN}`.toLowerCase();
         let prefix = 'p';
         if (item.mode === 'public') prefix = 'pb';
         else if (item.mode === 'private') prefix = 'pt';
