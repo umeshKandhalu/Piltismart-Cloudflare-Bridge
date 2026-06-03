@@ -442,12 +442,37 @@
         <div class="modal">
             <div class="logo-icon" style="margin: 0 auto 1.5rem auto; width: 48px; height: 48px;"></div>
             <h2>Gateway Authentication</h2>
-            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2rem;">Enter your API Key to access the monitoring dashboard.</p>
-            <div class="error-msg" id="auth-error">Invalid API Key</div>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2rem;">Log in using your ThingsBoard credentials.</p>
+            <div class="error-msg" id="auth-error">Authentication failed</div>
             <div class="input-group">
-                <input type="password" id="api-key" placeholder="GATEWAY_API_KEY" onkeydown="if(event.key === 'Enter') authenticate()">
+                <input type="email" id="tb-username" placeholder="Email Address" required>
             </div>
-            <button class="modal-btn" onclick="authenticate()" id="auth-btn">Access Dashboard</button>
+            <div class="input-group">
+                <input type="password" id="tb-password" placeholder="Password" onkeydown="if(event.key === 'Enter') authenticate()" required>
+            </div>
+            <button class="modal-btn" onclick="authenticate()" id="auth-btn">Sign In</button>
+        </div>
+    </div>
+    
+    <div id="audit-overlay" class="overlay hidden">
+        <div class="modal" style="max-width: 800px; max-height: 80vh; display: flex; flex-direction: column;">
+            <button class="modal-close" onclick="closeAudit()">&times;</button>
+            <h2>Audit Logs</h2>
+            <div class="table-container" style="overflow-y: auto; flex: 1; border-radius: 8px;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date & Time</th>
+                            <th>User</th>
+                            <th>Action</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="audit-logs-body">
+                        <tr><td colspan="4" class="empty-state">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
     
@@ -506,6 +531,10 @@
             <div class="sys-info" id="sys-info">
                 <div class="sys-stat">Connecting...</div>
             </div>
+            <div style="display: flex; gap: 10px; align-items: center; color: var(--text-muted); font-size: 0.9rem;">
+                <span id="user-greeting"></span>
+                <button onclick="logout()" class="btn-primary btn-sm btn-danger" style="display: none;" id="logout-btn">Logout</button>
+            </div>
         </header>
 
         <div class="controls-bar">
@@ -514,10 +543,16 @@
                 <input type="text" id="search-input" placeholder="Search by hostname, target, mode..." onkeyup="renderDashboard()">
             </div>
             
-            <button class="btn-primary" onclick="openRegister()">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                Add Global Route
-            </button>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn-primary" style="background: rgba(255,255,255,0.1);" onclick="openAudit()">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+                    Audit Logs
+                </button>
+                <button class="btn-primary" onclick="openRegister()">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    Add Global Route
+                </button>
+            </div>
         </div>
 
         <div id="dashboard-content">
@@ -531,7 +566,10 @@
     <script>
         const API_URL_SERVICES = '/services';
         const API_URL_REGISTER = '/register';
+        const API_URL_LOGIN = '/login';
+        const API_URL_AUDIT = '/audit';
         let apiKey = localStorage.getItem('gateway_api_key');
+        let gatewayUser = localStorage.getItem('gateway_user');
         let pollInterval;
         
         // Data State
@@ -561,28 +599,50 @@
         }
 
         async function authenticate() {
-            const inputKey = document.getElementById('api-key').value;
+            const username = document.getElementById('tb-username').value;
+            const password = document.getElementById('tb-password').value;
             const btn = document.getElementById('auth-btn');
-            if (!inputKey) return;
+            if (!username || !password) return;
             
             btn.innerHTML = '<div class="loader"></div>';
             
             try {
-                const res = await fetch(API_URL_SERVICES, { headers: { 'x-api-key': inputKey } });
+                const res = await fetch(API_URL_LOGIN, { 
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
                 if (res.ok) {
-                    localStorage.setItem('gateway_api_key', inputKey);
-                    apiKey = inputKey;
+                    const data = await res.json();
+                    localStorage.setItem('gateway_api_key', data.token);
+                    localStorage.setItem('gateway_user', data.user);
+                    apiKey = data.token;
+                    gatewayUser = data.user;
+                    
                     document.getElementById('auth-overlay').classList.add('hidden');
                     startPolling();
                 } else {
+                    const err = await res.json();
+                    document.getElementById('auth-error').innerText = err.error || 'Authentication failed';
                     document.getElementById('auth-error').style.display = 'block';
-                    btn.innerHTML = 'Access Dashboard';
+                    btn.innerHTML = 'Sign In';
                 }
             } catch (e) {
                 document.getElementById('auth-error').innerText = 'Connection failed';
                 document.getElementById('auth-error').style.display = 'block';
-                btn.innerHTML = 'Access Dashboard';
+                btn.innerHTML = 'Sign In';
             }
+        }
+        
+        function logout() {
+            localStorage.removeItem('gateway_api_key');
+            localStorage.removeItem('gateway_user');
+            apiKey = null;
+            gatewayUser = null;
+            clearInterval(pollInterval);
+            document.getElementById('auth-overlay').classList.remove('hidden');
+            document.getElementById('logout-btn').style.display = 'none';
+            document.getElementById('user-greeting').innerText = '';
         }
         
         function openRegister(vmid = '') { 
@@ -597,6 +657,49 @@
             document.getElementById('register-overlay').classList.add('hidden');
             document.getElementById('reg-error').style.display = 'none';
             document.getElementById('register-form').reset();
+        }
+        
+        async function openAudit() {
+            document.getElementById('audit-overlay').classList.remove('hidden');
+            document.getElementById('audit-logs-body').innerHTML = '<tr><td colspan="4" class="empty-state"><div class="loader"></div></td></tr>';
+            
+            if (!apiKey) return;
+            try {
+                const res = await fetch(API_URL_AUDIT, { headers: { 'x-api-key': apiKey } });
+                if (res.ok) {
+                    const logs = await res.json();
+                    renderAuditLogs(logs);
+                } else {
+                    document.getElementById('audit-logs-body').innerHTML = '<tr><td colspan="4" class="empty-state">Failed to load logs</td></tr>';
+                }
+            } catch (e) {
+                document.getElementById('audit-logs-body').innerHTML = '<tr><td colspan="4" class="empty-state">Connection error</td></tr>';
+            }
+        }
+        
+        function closeAudit() {
+            document.getElementById('audit-overlay').classList.add('hidden');
+        }
+        
+        function renderAuditLogs(logs) {
+            const tbody = document.getElementById('audit-logs-body');
+            if (!logs || logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No audit logs found.</td></tr>';
+                return;
+            }
+            
+            let html = '';
+            for (const log of logs) {
+                html += `
+                    <tr>
+                        <td class="date-tag">${formatDate(log.timestamp)}</td>
+                        <td><b>${log.user}</b></td>
+                        <td><span class="target-tag">${log.action}</span></td>
+                        <td>${log.details}</td>
+                    </tr>
+                `;
+            }
+            tbody.innerHTML = html;
         }
         
         async function autoDiscover() {
@@ -689,7 +792,11 @@
                 const res = await fetch(API_URL_SERVICES, { headers: { 'x-api-key': apiKey } });
                 if (res.status === 401 || res.status === 403) {
                     localStorage.removeItem('gateway_api_key');
+                    localStorage.removeItem('gateway_user');
                     apiKey = null;
+                    gatewayUser = null;
+                    document.getElementById('logout-btn').style.display = 'none';
+                    document.getElementById('user-greeting').innerText = '';
                     document.getElementById('auth-overlay').classList.remove('hidden');
                     clearInterval(pollInterval);
                     return;
@@ -851,6 +958,10 @@
         }
 
         function startPolling() {
+            if (gatewayUser) {
+                document.getElementById('user-greeting').innerText = `Logged in as ${gatewayUser}`;
+                document.getElementById('logout-btn').style.display = 'inline-block';
+            }
             fetchMetrics();
             pollInterval = setInterval(fetchMetrics, 5000);
         }

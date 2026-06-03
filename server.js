@@ -41,9 +41,14 @@ if (!fs.existsSync(DATA_DIR)) {
 
 const CREDENTIALS_FILE = path.join(DATA_DIR, 'credentials.json');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
+const AUDIT_FILE = path.join(DATA_DIR, 'audit.json');
+
+const TB_SERVER = process.env.TB_SERVER || "https://tb.piltismart.com";
 
 // In-Memory State
 let routes = {}; // hostname -> { target, mode, vmid, status, lastChecked }
+let sessions = {}; // Holds authenticated dashboard users
+let auditLogs = [];
 if (fs.existsSync(STATE_FILE)) {
     try {
         const rawRoutes = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
@@ -61,6 +66,28 @@ if (fs.existsSync(STATE_FILE)) {
 }
 function saveState() {
     fs.writeFileSync(STATE_FILE, JSON.stringify(routes, null, 2));
+}
+
+if (fs.existsSync(AUDIT_FILE)) {
+    try {
+        auditLogs = JSON.parse(fs.readFileSync(AUDIT_FILE, 'utf8'));
+    } catch (e) {
+        console.warn("[Gateway] Failed to parse audit.json, starting with empty logs.");
+    }
+}
+
+function logAudit(user, action, details) {
+    const entry = {
+        timestamp: new Date().toISOString(),
+        user: user || "System/Automation",
+        action: action,
+        details: details
+    };
+    auditLogs.unshift(entry);
+    if (auditLogs.length > 1000) {
+        auditLogs.length = 1000;
+    }
+    fs.writeFileSync(AUDIT_FILE, JSON.stringify(auditLogs, null, 2));
 }
 
 const cfAxios = axios.create({
@@ -306,15 +333,26 @@ const adminApp = express();
 adminApp.use(express.json());
 
 adminApp.use((req, res, next) => {
-    // Exclude Swagger UI, Dashboard UI, and related assets from authentication
-    if (req.path.startsWith('/docs') || req.path.startsWith('/dashboard') || req.path === '/favicon.ico') {
+    // Exclude Swagger UI, Dashboard UI, login endpoint, and related assets from authentication
+    if (req.path.startsWith('/docs') || req.path.startsWith('/dashboard') || req.path === '/login' || req.path === '/favicon.ico') {
         return next();
     }
     const apiKey = req.headers['x-api-key'] || req.query.api_key;
-    if (!apiKey || apiKey !== GATEWAY_API_KEY) {
+    if (!apiKey) {
         return res.status(401).json({ error: "Unauthorized: Invalid or missing x-api-key" });
     }
-    next();
+
+    if (apiKey === GATEWAY_API_KEY) {
+        req.user = "System/Automation";
+        return next();
+    }
+
+    if (sessions[apiKey] && sessions[apiKey].expires > Date.now()) {
+        req.user = sessions[apiKey].user;
+        return next();
+    }
+
+    return res.status(401).json({ error: "Unauthorized: Invalid or missing x-api-key" });
 });
 
 const swaggerOptions = {
@@ -407,6 +445,59 @@ async function discoverLxcDetails(vmid) {
 
 /**
  * @swagger
+ * /login:
+ *   post:
+ *     summary: Authenticate against ThingsBoard
+ *     tags: [Authentication]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               username: { type: string }
+ *               password: { type: string }
+ *     responses:
+ *       200: { description: "Returns session token" }
+ *       401: { description: "Invalid credentials" }
+ */
+adminApp.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+    if (!username || !password) return res.status(400).json({ error: "Username and password required" });
+    
+    try {
+        const tbResponse = await axios.post(`${TB_SERVER}/api/auth/login`, { username, password });
+        if (tbResponse.status === 200 && tbResponse.data.token) {
+            const sessionToken = crypto.randomUUID();
+            sessions[sessionToken] = {
+                user: username,
+                expires: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
+            };
+            logAudit(username, 'LOGIN', 'User successfully authenticated via ThingsBoard');
+            return res.json({ token: sessionToken, user: username });
+        }
+    } catch (e) {
+        return res.status(401).json({ error: "Invalid ThingsBoard credentials" });
+    }
+    return res.status(401).json({ error: "Authentication failed" });
+});
+
+/**
+ * @swagger
+ * /audit:
+ *   get:
+ *     summary: Retrieve audit logs
+ *     tags: [Gateway]
+ *     responses:
+ *       200: { description: "List of audit logs" }
+ */
+adminApp.get('/audit', (req, res) => {
+    res.json(auditLogs);
+});
+
+/**
+ * @swagger
  * /register:
  *   post:
  *     summary: Register a new LXC container and automate its routes
@@ -496,6 +587,7 @@ adminApp.post('/register', async (req, res) => {
 
     try {
         const urls = await registerService(vmid, hostname, ip, expose, !!force);
+        logAudit(req.user, 'REGISTER_SERVICE', `Registered route(s) for VMID ${vmid} (${hostname}): ${urls.join(', ')}`);
         res.json({ message: "Registered successfully", urls });
     } catch (e) {
         res.status(409).json({ error: e.message });
@@ -651,12 +743,14 @@ adminApp.delete('/services', async (req, res) => {
         return res.status(404).json({ error: "No matching URLs found to delete." });
     }
 
+    let detailStr = port ? `Port ${port} for VMID ${vmid}` : `ALL routes for VMID ${vmid}`;
     for (const hostname of hostnamesToDelete) {
         delete routes[hostname];
         deletedCount++;
     }
 
     saveState();
+    logAudit(req.user, port ? 'DELETE_ROUTE' : 'WIPE_CONTAINER', `Deleted ${detailStr} (${deletedCount} routes removed)`);
     await updateTunnelIngress();
 
     res.json({ message: `Successfully deleted ${deletedCount} URLs.` });
