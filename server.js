@@ -43,8 +43,6 @@ const CREDENTIALS_FILE = path.join(DATA_DIR, 'credentials.json');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 const AUDIT_FILE = path.join(DATA_DIR, 'audit.json');
 
-const TB_SERVER = process.env.TB_SERVER || "https://tb.piltismart.com";
-
 // In-Memory State
 let routes = {}; // hostname -> { target, mode, vmid, status, lastChecked }
 let sessions = {}; // Holds authenticated dashboard users
