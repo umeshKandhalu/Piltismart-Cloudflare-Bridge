@@ -960,8 +960,11 @@
         function startPolling() {
             if (gatewayUser) {
                 document.getElementById('user-greeting').innerText = `Logged in as ${gatewayUser}`;
-                document.getElementById('logout-btn').style.display = 'inline-block';
+            } else {
+                document.getElementById('user-greeting').innerText = `Logged in via Static Key`;
             }
+            document.getElementById('logout-btn').style.display = 'inline-block';
+            
             fetchMetrics();
             pollInterval = setInterval(fetchMetrics, 5000);
         }
