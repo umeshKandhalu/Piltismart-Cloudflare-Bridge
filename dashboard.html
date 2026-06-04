@@ -988,6 +988,25 @@
                 else alert("Failed to delete service.");
             } catch (e) { alert("Connection error."); }
         }
+        async function toggleRouteMode(hostname, newMode) {
+            try {
+                const res = await fetch(`/api/routes/${hostname}/mode`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+                    body: JSON.stringify({ mode: newMode })
+                });
+                if (res.ok) {
+                    fetchMetrics(); // Refresh table
+                } else {
+                    const data = await res.json();
+                    alert(data.error || "Failed to change mode.");
+                    fetchMetrics(); // Reset select state
+                }
+            } catch (e) {
+                alert("Connection error.");
+                fetchMetrics(); // Reset select state
+            }
+        }
         
         async function deleteContainer(vmid) {
             let msg = `
@@ -1190,13 +1209,25 @@
                     
                     const displayMode = svc.mode === 'tcp' ? 'private' : svc.mode;
                     
+                    let modeHtml = `<td style="text-transform: capitalize;">${displayMode}</td>`;
+                    if (!svc.target.endsWith(':22') && svc.mode !== 'tcp') {
+                        modeHtml = `
+                            <td>
+                                <select onchange="toggleRouteMode('${svc.hostname}', this.value)" style="background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; font-size: 0.85rem; cursor: pointer; outline: none;">
+                                    <option value="public" ${svc.mode === 'public' ? 'selected' : ''} style="background: var(--bg-main);">Public</option>
+                                    <option value="private" ${svc.mode === 'private' ? 'selected' : ''} style="background: var(--bg-main);">Private</option>
+                                </select>
+                            </td>
+                        `;
+                    }
+                    
                     html += `
                         <tr>
                             <td>${getStatusBadge(svc.status)}</td>
                             <td><a href="${svc.url}" target="_blank" class="card-url">${svc.hostname}</a></td>
                             <td><span class="target-tag">${svc.target}</span></td>
                             <td><span class="target-tag" style="background: rgba(59, 130, 246, 0.15); color: var(--accent); border-color: rgba(59,130,246,0.3); font-weight: 600;">${getPortName(svc.target)}</span></td>
-                            <td style="text-transform: capitalize;">${displayMode}</td>
+                            ${modeHtml}
                             <td style="text-align: center;">${activeStr}</td>
                             <td class="metric-value">${latencyStr}</td>
                             <td class="metric-value">${svc.requests.toLocaleString()}</td>
@@ -1212,4 +1243,35 @@
                             </td>
                         </tr>
                     `;
-             
+                }
+
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            content.innerHTML = html;
+        }
+
+        function startPolling() {
+            if (gatewayUser) {
+                document.getElementById('user-greeting').innerText = `Logged in as ${gatewayUser}`;
+            } else {
+                document.getElementById('user-greeting').innerText = `Logged in via Static Key`;
+            }
+            document.getElementById('logout-btn').style.display = 'inline-block';
+            
+            fetchMetrics();
+            pollInterval = setInterval(fetchMetrics, 5000);
+        }
+
+        if (apiKey) {
+            document.getElementById('auth-overlay').classList.add('hidden');
+            startPolling();
+        }
+    </script>
+</body>
+</html>

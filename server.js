@@ -735,6 +735,27 @@ adminApp.get('/discover/:vmid', async (req, res) => {
     }
 });
 
+adminApp.put('/api/routes/:hostname/mode', (req, res) => {
+    const hostname = req.params.hostname;
+    const { mode } = req.body;
+    
+    if (!routes[hostname]) {
+        return res.status(404).json({ error: "Route not found" });
+    }
+    
+    if (routes[hostname].target.endsWith(':22')) {
+        return res.status(400).json({ error: "SSH routes cannot be changed from private mode." });
+    }
+    
+    if (mode !== 'public' && mode !== 'private' && mode !== 'tcp') {
+        return res.status(400).json({ error: "Invalid mode." });
+    }
+    
+    routes[hostname].mode = mode;
+    saveState();
+    res.json({ success: true, mode: mode });
+});
+
 /**
  * @swagger
  * /services:
@@ -1032,4 +1053,13 @@ proxyServer.on('upgrade', (req, socket, head) => {
             saveState();
             await updateTunnelIngress();
         } catch (e) {
-            console.error("[Ga
+            console.error("[Gateway] Failed to auto-register Admin API:", e.message);
+        }
+    }
+
+    console.log("[Gateway] Syncing Ingress routes with Cloudflare...");
+    await updateTunnelIngress();
+
+    console.log("Starting Autonomous Gateway Manager...");
+    startCloudflared();
+})();
