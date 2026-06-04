@@ -62,6 +62,76 @@ if (fs.existsSync(STATE_FILE)) {
         console.error("[Gateway] Failed to parse existing state file. Starting fresh.");
     }
 }
+
+// Embedded Web Terminal State (ttyd)
+const ttydInstances = {}; // hostname -> { port, proc }
+let nextTtydPort = 8100;
+
+function startTtyd(hostname, targetIp) {
+    if (ttydInstances[hostname]) return ttydInstances[hostname].port;
+    
+    const port = nextTtydPort++;
+    console.log(`[Gateway] Spawning embedded ttyd for ${hostname} to target ${targetIp} on local port ${port}`);
+    
+    const cmd = `
+echo -e "\\e[36m"
+cat << 'EOF'
+    ____  ______  _______________ __  ______    ____  ______
+   / __ \\/  _/ / /_  __/  _/ ___//  |/  /   |  / __ \\/_  __/
+  / /_/ // // /   / /  / / \\__ \\/ /|_/ / /| | / /_/ / / /   
+ / ____// // /___/ / _/ / ___/ / /  / / ___ |/ _, _/ / /    
+/_/   /___/_____/_/ /___//____/_/  /_/_/  |_/_/ |_| /_/     
+EOF
+echo -e "\\e[0m"
+echo -e "\\e[33m=====================================================================\\e[0m"
+echo -e "\\e[31m  WARNING: This system is the property of PiltiSmart.\\e[0m"
+echo -e "\\e[33m  Unauthorized access, use, or modification of this system\\e[0m"
+echo -e "\\e[33m  or of the data contained herein is strictly prohibited.\\e[0m"
+echo -e "\\e[33m=====================================================================\\e[0m\\n"
+
+while true; do
+  read -p "login as: " user
+  if [ -n "$user" ]; then
+    exec ssh -o StrictHostKeyChecking=no "$user@${targetIp}"
+  fi
+done
+`;
+    const proc = spawn('/usr/local/bin/ttyd', ['-W', '-p', port.toString(), 'bash', '-c', cmd]);
+    
+    proc.on('error', (err) => {
+        console.error(`[Gateway] ttyd error for ${hostname}:`, err);
+    });
+    
+    proc.on('close', (code) => {
+        console.log(`[Gateway] ttyd process for ${hostname} exited with code ${code}`);
+        delete ttydInstances[hostname];
+    });
+    
+    ttydInstances[hostname] = { port, proc };
+    return port;
+}
+
+function stopTtyd(hostname) {
+    if (ttydInstances[hostname]) {
+        console.log(`[Gateway] Killing ttyd process for ${hostname}`);
+        try {
+            ttydInstances[hostname].proc.kill();
+        } catch(e) {}
+        delete ttydInstances[hostname];
+    }
+}
+
+// Bootstrap existing ttyd routes
+for (const [hostname, route] of Object.entries(routes)) {
+    route.activeConnections = 0;
+    if (route.target && route.target.endsWith(':22')) {
+        startTtyd(hostname, route.target.split(':')[0]);
+        if (route.idleTimeout) {
+            route.lastActive = Date.now();
+        }
+    }
+}
+
 function saveState() {
     fs.writeFileSync(STATE_FILE, JSON.stringify(routes, null, 2));
 }
@@ -211,9 +281,12 @@ async function updateTunnelIngress() {
     try {
         const ingress = [];
         for (const [hostname, data] of Object.entries(routes)) {
+            const dataPort = parseInt(data.target.split(':')[1]);
+            
             if (data.mode === 'tcp') {
                 ingress.push({ hostname: hostname, service: `tcp://${data.target}` });
             } else {
+                // All HTTP and SSH (ttyd) routes go through the Express proxy
                 ingress.push({ hostname: hostname, service: `http://localhost:${PROXY_PORT}` });
             }
         }
@@ -233,6 +306,7 @@ async function registerService(vmid, hostname, ip, exposeArray, force = false) {
         // Clear old routes for this VMID from state
         for (const [existingHostname, data] of Object.entries(routes)) {
             if (data.vmid === vmid) {
+                stopTtyd(existingHostname);
                 delete routes[existingHostname];
             }
         }
@@ -260,8 +334,18 @@ async function registerService(vmid, hostname, ip, exposeArray, force = false) {
             lastChecked: new Date().toISOString(),
             createdAt: new Date().toISOString(),
             latency: -1,
-            metrics: { requests: 0, bytesRx: 0, bytesTx: 0 }
+            metrics: { requests: 0, bytesRx: 0, bytesTx: 0 },
+            activeConnections: 0
         };
+        
+        if (item.idleTimeout !== undefined && item.idleTimeout > 0) {
+            routes[uniqueHostname].idleTimeout = item.idleTimeout;
+            routes[uniqueHostname].lastActive = Date.now();
+        }
+
+        if (item.port === 22) {
+            startTtyd(uniqueHostname, ip);
+        }
 
         await createDnsRecord(uniqueHostname);
         generatedUrls.push({ port: item.port, url: `https://${uniqueHostname}`, mode: item.mode });
@@ -318,6 +402,18 @@ setInterval(async () => {
             
             data.lastChecked = new Date().toISOString();
         }
+
+        // Ephemeral Idle Timeout Sweep
+        if (data.idleTimeout && data.activeConnections === 0) {
+            const idleMs = Date.now() - (data.lastActive || Date.now());
+            if (idleMs > data.idleTimeout * 60000) {
+                console.log(`[Gateway] Sweeping idle route ${hostname} (inactive for >${data.idleTimeout}m)`);
+                stopTtyd(hostname);
+                delete routes[hostname];
+                stateChanged = true;
+                logAudit("System/Automation", "IDLE_TIMEOUT_SWEEP", `Automatically deleted idle route ${hostname}`);
+            }
+        }
     }
     
     if (stateChanged) {
@@ -331,8 +427,8 @@ const adminApp = express();
 adminApp.use(express.json());
 
 adminApp.use((req, res, next) => {
-    // Exclude Swagger UI, Dashboard UI, login endpoint, and related assets from authentication
-    if (req.path.startsWith('/docs') || req.path.startsWith('/dashboard') || req.path === '/login' || req.path === '/favicon.ico') {
+    // Allow public access to docs, dashboard UI, login, logout and favicon
+    if (req.path === '/' || req.path.startsWith('/docs') || req.path.startsWith('/dashboard') || req.path === '/login' || req.path === '/logout' || req.path === '/favicon.ico') {
         return next();
     }
     const apiKey = req.headers['x-api-key'] || req.query.api_key;
@@ -467,18 +563,40 @@ adminApp.post('/login', async (req, res) => {
     try {
         const tbResponse = await axios.post(`${TB_SERVER}/api/auth/login`, { username, password });
         if (tbResponse.status === 200 && tbResponse.data.token) {
-            const sessionToken = crypto.randomUUID();
-            sessions[sessionToken] = {
+            const localToken = crypto.randomUUID();
+            sessions[localToken] = {
                 user: username,
                 expires: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
             };
             logAudit(username, 'LOGIN', 'User successfully authenticated via ThingsBoard');
-            return res.json({ token: sessionToken, user: username });
+            res.json({ success: true, token: localToken, user: username });
         }
     } catch (e) {
-        return res.status(401).json({ error: "Invalid ThingsBoard credentials" });
+        const errorReason = e.response?.data?.message || e.response?.statusText || e.message;
+        console.error(`[Gateway] ThingsBoard login failed for ${username}: ${errorReason}`);
+        logAudit(username || 'Unknown', 'LOGIN_FAILED', `TB Auth Failed: ${errorReason}`);
+        res.status(401).json({ error: `Login failed: ${errorReason}` });
     }
-    return res.status(401).json({ error: "Authentication failed" });
+});
+
+/**
+ * @swagger
+ * /logout:
+ *   post:
+ *     summary: Invalidate user session
+ *     tags: [Auth]
+ *     security:
+ *       - ApiKeyAuth: []
+ */
+adminApp.post('/logout', (req, res) => {
+    // Note: since /logout is public in the path bypass, we check headers manually
+    const providedKey = req.headers['x-api-key'];
+    if (providedKey && sessions[providedKey]) {
+        const user = sessions[providedKey].user;
+        logAudit(user, 'LOGOUT', `User ${user} successfully logged out of the dashboard.`);
+        delete sessions[providedKey];
+    }
+    res.json({ success: true });
 });
 
 /**
@@ -585,7 +703,7 @@ adminApp.post('/register', async (req, res) => {
 
     try {
         const urls = await registerService(vmid, hostname, ip, expose, !!force);
-        logAudit(req.user, 'REGISTER_SERVICE', `Registered route(s) for VMID ${vmid} (${hostname}): ${urls.join(', ')}`);
+        logAudit(req.user, 'REGISTER_SERVICE', `Registered route(s) for VMID ${vmid} (${hostname}): ${urls.map(u => u.url).join(', ')}`);
         res.json({ message: "Registered successfully", urls });
     } catch (e) {
         res.status(409).json({ error: e.message });
@@ -639,10 +757,24 @@ adminApp.get('/discover/:vmid', async (req, res) => {
  *       200:
  *         description: A JSON object grouping services by VMID
  */
-adminApp.get('/services', (req, res) => {
+let tunnelConnectionsCache = { data: [], lastFetch: 0 };
+
+adminApp.get('/services', async (req, res) => {
     const { vmid, port, mode } = req.query;
     const filterVmid = vmid ? parseInt(vmid) : null;
     const filterPort = port ? parseInt(port) : null;
+
+    if (ACTIVE_TUNNEL_ID && (Date.now() - tunnelConnectionsCache.lastFetch > 10000)) {
+        try {
+            const cfRes = await cfAxios.get(`/accounts/${CF_ACCOUNT_ID}/cfd_tunnel/${ACTIVE_TUNNEL_ID}`);
+            if (cfRes.data && cfRes.data.result) {
+                tunnelConnectionsCache.data = cfRes.data.result.connections || [];
+            }
+            tunnelConnectionsCache.lastFetch = Date.now();
+        } catch (e) {
+            console.error("[Gateway] Failed to fetch tunnel connections", e.message);
+        }
+    }
 
     const groupedServices = {};
     for (const [hostname, data] of Object.entries(routes)) {
@@ -664,6 +796,7 @@ adminApp.get('/services', (req, res) => {
     res.json({ 
         gateway_status: "active",
         tunnel_id: ACTIVE_TUNNEL_ID,
+        tunnel_connections: tunnelConnectionsCache.data,
         last_updated: new Date().toISOString(), 
         services: groupedServices 
     });
@@ -743,6 +876,7 @@ adminApp.delete('/services', async (req, res) => {
 
     let detailStr = port ? `Port ${port} for VMID ${vmid}` : `ALL routes for VMID ${vmid}`;
     for (const hostname of hostnamesToDelete) {
+        stopTtyd(hostname);
         delete routes[hostname];
         deletedCount++;
     }
@@ -766,7 +900,17 @@ proxyApp.get('/__login__', (req, res) => {
     res.sendFile(path.join(__dirname, 'login.html'));
 });
 
+adminApp.get('/', (req, res) => {
+    res.redirect('/dashboard');
+});
+
+adminApp.get('/login', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.sendFile(path.join(__dirname, 'login.html'));
+});
+
 adminApp.get('/dashboard', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.sendFile(path.join(__dirname, 'dashboard.html'));
 });
 
@@ -807,16 +951,34 @@ proxyApp.use((req, res, next) => {
             return res.redirect(`/__login__?redirect=https://${host}${req.originalUrl}`);
         }
     }
-
-    const proxy = createProxyMiddleware({
-        target: `http://${route.target}`,
-        changeOrigin: true,
-        ws: true,
-        logLevel: 'silent'
-    });
     
-    proxy(req, res, next);
+    if (route) {
+        route.activeConnections = (route.activeConnections || 0) + 1;
+        res.on('close', () => {
+            route.activeConnections = Math.max(0, (route.activeConnections || 1) - 1);
+        });
+    }
+
+    next();
 });
+
+const dynamicProxy = createProxyMiddleware({
+    target: 'http://localhost',
+    router: function(req) {
+        const host = req.hostname || req.headers.host;
+        const route = routes[host];
+        if (!route) return 'http://localhost';
+        if (ttydInstances[host]) {
+            return `http://localhost:${ttydInstances[host].port}`;
+        }
+        return `http://${route.target}`;
+    },
+    changeOrigin: true,
+    ws: true,
+    logLevel: 'silent'
+});
+
+proxyApp.use(dynamicProxy);
 
 const proxyServer = proxyApp.listen(PROXY_PORT, '0.0.0.0', () => {
     console.log(`[Gateway Ingress] Listening for Cloudflare traffic on port ${PROXY_PORT}`);
@@ -828,18 +990,20 @@ proxyServer.on('upgrade', (req, socket, head) => {
     
     if (route && (route.mode === 'public' || req.url.includes('token='))) {
         route.metrics.requests++;
+        
+        route.activeConnections = (route.activeConnections || 0) + 1;
+
         socket.on('close', () => {
             route.metrics.bytesRx += socket.bytesRead || 0;
             route.metrics.bytesTx += socket.bytesWritten || 0;
+            
+            route.activeConnections = Math.max(0, (route.activeConnections || 1) - 1);
+            if (route.idleTimeout && route.activeConnections === 0) {
+                route.lastActive = Date.now();
+            }
         });
 
-        const proxy = createProxyMiddleware({
-            target: `http://${route.target}`,
-            changeOrigin: true,
-            ws: true,
-            logLevel: 'silent'
-        });
-        proxy.upgrade(req, socket, head);
+        dynamicProxy.upgrade(req, socket, head);
     } else {
         socket.destroy();
     }

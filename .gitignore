@@ -6,3 +6,4 @@ tmp/
 
 .env
 gateway-data/
+.env*
