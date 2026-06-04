@@ -1212,4 +1212,35 @@
                             </td>
                         </tr>
                     `;
-             
+                }
+
+                html += `
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            content.innerHTML = html;
+        }
+
+        function startPolling() {
+            if (gatewayUser) {
+                document.getElementById('user-greeting').innerText = `Logged in as ${gatewayUser}`;
+            } else {
+                document.getElementById('user-greeting').innerText = `Logged in via Static Key`;
+            }
+            document.getElementById('logout-btn').style.display = 'inline-block';
+            
+            fetchMetrics();
+            pollInterval = setInterval(fetchMetrics, 5000);
+        }
+
+        if (apiKey) {
+            document.getElementById('auth-overlay').classList.add('hidden');
+            startPolling();
+        }
+    </script>
+</body>
+</html>
