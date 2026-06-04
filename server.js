@@ -1032,13 +1032,4 @@ proxyServer.on('upgrade', (req, socket, head) => {
             saveState();
             await updateTunnelIngress();
         } catch (e) {
-            console.error("[Gateway] Failed to auto-register Admin API:", e.message);
-        }
-    }
-
-    console.log("[Gateway] Syncing Ingress routes with Cloudflare...");
-    await updateTunnelIngress();
-
-    console.log("Starting Autonomous Gateway Manager...");
-    startCloudflared();
-})();
+            console.error("[Ga
