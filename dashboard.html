@@ -988,7 +988,23 @@
                 else alert("Failed to delete service.");
             } catch (e) { alert("Connection error."); }
         }
-        async function toggleRouteMode(hostname, newMode) {
+        async function toggleRouteMode(hostname, newMode, selectEl, oldMode) {
+            const confirmed = await customConfirm('Change Access Mode', `
+                <div style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.5rem;">
+                    Are you sure you want to change the access mode to <b style="text-transform:uppercase; color: var(--accent);">${newMode}</b>?
+                </div>
+                <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 15px; text-align: center; border: 1px solid var(--border-color);">
+                    <div style="font-size: 1.05rem; font-weight: 500; color: var(--text-main); overflow-wrap: break-word; word-break: break-word;">
+                        ${hostname}
+                    </div>
+                </div>
+            `);
+            
+            if (!confirmed) {
+                selectEl.value = oldMode;
+                return;
+            }
+
             try {
                 const res = await fetch(`/api/routes/${hostname}/mode`, {
                     method: 'PUT',
@@ -1000,11 +1016,11 @@
                 } else {
                     const data = await res.json();
                     alert(data.error || "Failed to change mode.");
-                    fetchMetrics(); // Reset select state
+                    selectEl.value = oldMode;
                 }
             } catch (e) {
                 alert("Connection error.");
-                fetchMetrics(); // Reset select state
+                selectEl.value = oldMode;
             }
         }
         
@@ -1213,7 +1229,7 @@
                     if (!svc.target.endsWith(':22') && svc.mode !== 'tcp') {
                         modeHtml = `
                             <td>
-                                <select onchange="toggleRouteMode('${svc.hostname}', this.value)" style="background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; font-size: 0.85rem; cursor: pointer; outline: none;">
+                                <select onchange="toggleRouteMode('${svc.hostname}', this.value, this, '${svc.mode}')" style="background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; font-size: 0.85rem; cursor: pointer; outline: none;">
                                     <option value="public" ${svc.mode === 'public' ? 'selected' : ''} style="background: var(--bg-main);">Public</option>
                                     <option value="private" ${svc.mode === 'private' ? 'selected' : ''} style="background: var(--bg-main);">Private</option>
                                 </select>
@@ -1225,7 +1241,7 @@
                         <tr>
                             <td>${getStatusBadge(svc.status)}</td>
                             <td><a href="${svc.url}" target="_blank" class="card-url">${svc.hostname}</a></td>
-                            <td><span class="target-tag">${svc.target}</span></td>
+                            <td><span class="target-tag">${svc.protocol === 'https' ? '<span style="color:var(--success);font-weight:bold;margin-right:4px;">[HTTPS]</span>' : ''}${svc.target}</span></td>
                             <td><span class="target-tag" style="background: rgba(59, 130, 246, 0.15); color: var(--accent); border-color: rgba(59,130,246,0.3); font-weight: 600;">${getPortName(svc.target)}</span></td>
                             ${modeHtml}
                             <td style="text-align: center;">${activeStr}</td>

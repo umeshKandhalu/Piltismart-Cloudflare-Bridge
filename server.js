@@ -328,6 +328,7 @@ async function registerService(vmid, hostname, ip, exposeArray, force = false) {
         
         routes[uniqueHostname] = {
             target: `${ip}:${item.port}`,
+            protocol: item.protocol || 'http',
             mode: item.mode,
             vmid: vmid,
             status: 'pending',
@@ -668,8 +669,8 @@ adminApp.post('/register', async (req, res) => {
     let { vmid, hostname, ip, expose, force } = req.body;
     
     // Strict Payload Validation
-    if (!vmid || typeof vmid !== 'number' || vmid <= 0) {
-        return res.status(400).json({ error: "Invalid payload: 'vmid' must be a positive integer." });
+    if (typeof vmid !== 'number' || vmid < 0) {
+        return res.status(400).json({ error: "Invalid payload: 'vmid' must be a non-negative integer (0 for host)." });
     }
     if (!expose || !Array.isArray(expose) || expose.length === 0) {
         return res.status(400).json({ error: "Invalid payload: 'expose' must be a non-empty array." });
@@ -683,6 +684,9 @@ adminApp.post('/register', async (req, res) => {
         if (!['public', 'private', 'tcp'].includes(item.mode)) {
             return res.status(400).json({ error: `Invalid mode: ${item.mode} for port ${item.port}. Must be 'public', 'private', or 'tcp'.` });
         }
+        if (item.protocol && !['http', 'https'].includes(item.protocol)) {
+            return res.status(400).json({ error: `Invalid protocol: ${item.protocol} for port ${item.port}. Must be 'http' or 'https'.` });
+        }
         if (seenPorts.has(item.port)) {
             return res.status(400).json({ error: `Duplicate port detected in payload: ${item.port}. A port can only be exposed once per container.` });
         }
@@ -690,6 +694,9 @@ adminApp.post('/register', async (req, res) => {
     }
 
     if (!hostname || !ip) {
+        if (vmid === 0) {
+            return res.status(400).json({ error: "For Host routing (vmid 0), 'hostname' and 'ip' must be explicitly provided in the payload." });
+        }
         try {
             console.log(`[Gateway] Auto-discovering details for VMID ${vmid}...`);
             const details = await discoverLxcDetails(vmid);
@@ -992,10 +999,12 @@ const dynamicProxy = createProxyMiddleware({
         if (ttydInstances[host]) {
             return `http://localhost:${ttydInstances[host].port}`;
         }
-        return `http://${route.target}`;
+        const protocol = route.protocol || 'http';
+        return `${protocol}://${route.target}`;
     },
     changeOrigin: true,
     ws: true,
+    secure: false, // Bypass self-signed SSL cert errors for Proxmox/HTTPS backends
     logLevel: 'silent'
 });
 
