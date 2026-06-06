@@ -19,7 +19,7 @@ COPY package*.json ./
 RUN npm install --production
 
 # Copy source code and UI
-COPY server.js login.html login_wrapper.sh entrypoint.sh ./
+COPY server.js login.html dashboard.html login_wrapper.sh entrypoint.sh ./
 RUN chmod +x login_wrapper.sh entrypoint.sh
 
 # Environment variables (defaults)
