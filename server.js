@@ -1182,7 +1182,11 @@ proxyServer.on('upgrade', (req, socket, head) => {
                 mode: 'public',
                 vmid: 999,
                 status: 'online',
-                lastChecked: new Date().toISOString()
+                lastChecked: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
+                latency: -1,
+                metrics: { requests: 0, bytesRx: 0, bytesTx: 0 },
+                activeConnections: 0
             };
             saveState();
             await updateTunnelIngress();
