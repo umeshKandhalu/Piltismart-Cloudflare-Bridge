@@ -744,14 +744,18 @@
                 portInput.value = preset;
             }
             
+            const modeSelect = document.getElementById('reg-mode');
+            const publicOption = modeSelect.querySelector('option[value="public"]');
+
             if (parseInt(portInput.value) === 22) {
                 timeoutContainer.style.display = 'block';
-                const modeSelect = document.getElementById('reg-mode');
-                modeSelect.value = 'private';
-                modeSelect.disabled = true;
+                publicOption.disabled = true;
+                if (modeSelect.value === 'public') {
+                    modeSelect.value = 'tcp';
+                }
             } else {
                 timeoutContainer.style.display = 'none';
-                document.getElementById('reg-mode').disabled = false;
+                publicOption.disabled = false;
             }
         }
         
