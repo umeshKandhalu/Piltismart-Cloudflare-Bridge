@@ -539,7 +539,7 @@
                     <input type="text" id="reg-ip" required placeholder="e.g. 192.168.0.28">
                 </div>
                 
-                <div class="form-row">
+                <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
                     <div class="input-group">
                         <label>Port</label>
                         <div style="display: flex; gap: 10px;">
@@ -558,7 +558,15 @@
                         </div>
                     </div>
                     <div class="input-group">
-                        <label>Access Mode</label>
+                        <label>Type</label>
+                        <select id="reg-type" required onchange="updateModeUI()">
+                            <option value="tls">TLS</option>
+                            <option value="tcp">TCP</option>
+                            <option value="udp">UDP</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label>Access Type</label>
                         <select id="reg-mode" required onchange="updateModeUI()">
                             <option value="public">Public</option>
                             <option value="private">Private (Auth)</option>
@@ -748,29 +756,39 @@
             const preset = document.getElementById('reg-port-preset').value;
             const portInput = document.getElementById('reg-port');
             const timeoutContainer = document.getElementById('reg-timeout-container');
+            const typeSelect = document.getElementById('reg-type');
+            const modeSelect = document.getElementById('reg-mode');
             
             if (preset === 'custom') {
                 portInput.style.display = 'block';
                 if (portInput.value === '') portInput.value = '80'; // fallback
-                portInput.focus();
             } else {
                 portInput.style.display = 'none';
                 portInput.value = preset;
             }
             
-            const modeSelect = document.getElementById('reg-mode');
-            const publicOption = modeSelect.querySelector('option[value="public"]');
+            const currentPort = parseInt(portInput.value);
+            
+            if (currentPort === 22) {
+                typeSelect.value = 'tcp';
+                modeSelect.value = 'tcp';
+            } else if ([3306, 5432, 3389].includes(currentPort)) {
+                typeSelect.value = 'tcp';
+                modeSelect.value = 'secure_tcp';
+            } else if ([80, 443, 8006, 11434].includes(currentPort)) {
+                typeSelect.value = 'tls';
+                modeSelect.value = 'public';
+            }
 
-            if (parseInt(portInput.value) === 22) {
+            const publicOption = modeSelect.querySelector('option[value="public"]');
+            if (currentPort === 22) {
                 timeoutContainer.style.display = 'block';
                 publicOption.disabled = true;
-                if (modeSelect.value === 'public') {
-                    modeSelect.value = 'tcp';
-                }
             } else {
                 timeoutContainer.style.display = 'none';
                 publicOption.disabled = false;
             }
+            updateModeUI();
         }
         
         function openRegister(vmid = '') { 
@@ -883,6 +901,12 @@
                 port: port,
                 mode: document.getElementById('reg-mode').value
             };
+            const typeVal = document.getElementById('reg-type').value;
+            if (typeVal === 'tls') {
+                exposeItem.protocol = 'https';
+            } else if (typeVal === 'udp') {
+                exposeItem.protocol = 'udp'; // Future proofing
+            }
             if (port === 22) {
                 exposeItem.idleTimeout = parseInt(document.getElementById('reg-timeout').value) || 0;
             }
