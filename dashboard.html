@@ -559,10 +559,11 @@
                     </div>
                     <div class="input-group">
                         <label>Access Mode</label>
-                        <select id="reg-mode" required>
+                        <select id="reg-mode" required onchange="updateModeUI()">
                             <option value="public">Public</option>
                             <option value="private">Private (Auth)</option>
                             <option value="tcp">TCP (Raw)</option>
+                            <option value="secure_tcp">Secure TCP (Service Token)</option>
                         </select>
                     </div>
                 </div>
@@ -571,7 +572,12 @@
                     <label>Idle Timeout (minutes) <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: normal;">(0 = never)</span></label>
                     <input type="number" id="reg-timeout" value="30" min="0" max="1440" style="width: 100%;">
                 </div>
-                <div class="checkbox-group">
+                
+                <div class="input-group" id="reg-validity-container" style="display: none; margin-top: 15px;">
+                    <label>Token Validity (Days) <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: normal;">(Max 90)</span></label>
+                    <input type="number" id="reg-validity" value="30" min="1" max="90" style="width: 100%;">
+                </div>
+                <div class="checkbox-group" style="margin-top: 15px;">
                     <input type="checkbox" id="reg-force">
                     <label for="reg-force">Force Overwrite (Warning: clears old routes for this VMID)</label>
                 </div>
@@ -880,6 +886,9 @@
             if (port === 22) {
                 exposeItem.idleTimeout = parseInt(document.getElementById('reg-timeout').value) || 0;
             }
+            if (exposeItem.mode === 'secure_tcp') {
+                exposeItem.validityDays = parseInt(document.getElementById('reg-validity').value) || 30;
+            }
 
             const payload = {
                 vmid: parseInt(document.getElementById('reg-vmid').value),
@@ -898,8 +907,15 @@
                 });
                 
                 if (res.ok) {
+                    const resData = await res.json();
                     closeRegister();
                     fetchMetrics(); // instant refresh
+                    
+                    // Show secure token modal if applicable
+                    const secureUrl = resData.urls && resData.urls.find(u => u.mode === 'secure_tcp');
+                    if (secureUrl && secureUrl.clientId) {
+                        showTokenModal(secureUrl);
+                    }
                 } else {
                     const err = await res.json();
                     document.getElementById('reg-error').innerText = err.error || 'Failed to register';
@@ -910,6 +926,38 @@
                 document.getElementById('reg-error').style.display = 'block';
             }
             btn.innerHTML = ogText;
+        }
+
+        function updateModeUI() {
+            const mode = document.getElementById('reg-mode').value;
+            const validityContainer = document.getElementById('reg-validity-container');
+            if (mode === 'secure_tcp') {
+                validityContainer.style.display = 'block';
+            } else {
+                validityContainer.style.display = 'none';
+            }
+        }
+        
+        function showTokenModal(routeData) {
+            const modalHtml = `
+            <div id="token-overlay" class="overlay">
+                <div class="modal" style="max-width: 600px;">
+                    <h2 style="color: var(--success); display: flex; align-items: center; gap: 10px;">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Secure TCP Route Created!
+                    </h2>
+                    <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger); padding: 15px; border-radius: 8px; margin: 20px 0;">
+                        <b style="color: var(--danger);">⚠️ SAVE THIS NOW</b><br>
+                        <span style="color: var(--text-muted); font-size: 0.9rem;">The Client Secret is only visible once. If you lose it, you must delete and recreate the route.</span>
+                    </div>
+                    <div class="input-group">
+                        <label>Connection Command (Copy & Paste)</label>
+                        <textarea readonly style="width: 100%; height: 80px; font-family: monospace; background: var(--bg-dark); color: var(--text-main); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); resize: none;">cloudflared access tcp --hostname ${routeData.hostname} --url 127.0.0.1:${routeData.port} --service-token-id "${routeData.clientId}" --service-token-secret "${routeData.clientSecret}"</textarea>
+                    </div>
+                    <button class="modal-btn" onclick="document.getElementById('token-overlay').remove()" style="margin-top: 20px;">I have saved the command</button>
+                </div>
+            </div>`;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
         }
         
         function closeConfirm() {

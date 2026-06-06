@@ -314,6 +314,60 @@ function startCloudflared() {
     }
 }
 
+// --- CLOUDFLARE ACCESS (SERVICE TOKENS) ---
+
+async function createAccessServiceToken(name, durationDays) {
+    console.log(`[CF Access] Creating Service Token: ${name} (${durationDays} days)`);
+    // Duration must be in format like "8760h"
+    const durationHours = parseInt(durationDays) * 24;
+    const res = await cfAxios.post(`/accounts/${CF_ACCOUNT_ID}/access/service_tokens`, {
+        name: name,
+        duration: `${durationHours}h`
+    });
+    return res.data.result; // { id, client_id, client_secret }
+}
+
+async function revokeAccessServiceToken(tokenId) {
+    if (!tokenId) return;
+    console.log(`[CF Access] Revoking Service Token: ${tokenId}`);
+    try {
+        await cfAxios.delete(`/accounts/${CF_ACCOUNT_ID}/access/service_tokens/${tokenId}`);
+    } catch(e) {
+        console.error(`[CF Access] Failed to revoke token ${tokenId}: ${e.response?.data?.errors?.[0]?.message || e.message}`);
+    }
+}
+
+async function createAccessApp(hostname) {
+    console.log(`[CF Access] Creating Access App for: ${hostname}`);
+    const res = await cfAxios.post(`/accounts/${CF_ACCOUNT_ID}/access/apps`, {
+        name: `Secure-TCP-${hostname}`,
+        domain: hostname,
+        type: "self_hosted",
+        session_duration: "24h",
+        app_launcher_visible: false
+    });
+    return res.data.result.id;
+}
+
+async function deleteAccessApp(appId) {
+    if (!appId) return;
+    console.log(`[CF Access] Deleting Access App: ${appId}`);
+    try {
+        await cfAxios.delete(`/accounts/${CF_ACCOUNT_ID}/access/apps/${appId}`);
+    } catch(e) {
+        console.error(`[CF Access] Failed to delete app ${appId}: ${e.response?.data?.errors?.[0]?.message || e.message}`);
+    }
+}
+
+async function createAccessPolicy(appId, tokenId) {
+    console.log(`[CF Access] Creating Policy for App ${appId} with Token ${tokenId}`);
+    await cfAxios.post(`/accounts/${CF_ACCOUNT_ID}/access/apps/${appId}/policies`, {
+        name: "Allow Service Token Only",
+        decision: "allow",
+        include: [{ service_token: { token_id: tokenId } }]
+    });
+}
+
 // --- CLOUDFLARE ROUTING AUTOMATION ---
 
 async function createDnsRecord(hostname) {
@@ -375,14 +429,29 @@ async function updateTunnelIngress() {
     }
 }
 
+async function deleteRouteState(hostname) {
+    const data = routes[hostname];
+    if (!data) return;
+    
+    stopTtyd(hostname);
+    stopPinggy(hostname);
+    
+    if (data.serviceTokenId) {
+        await revokeAccessServiceToken(data.serviceTokenId);
+    }
+    if (data.accessAppId) {
+        await deleteAccessApp(data.accessAppId);
+    }
+    
+    delete routes[hostname];
+}
+
 async function registerService(vmid, hostname, ip, exposeArray, force = false, envType = 'lxc') {
     if (force) {
         // Clear old routes for this VMID from state
         for (const [existingHostname, data] of Object.entries(routes)) {
             if (data.vmid === vmid) {
-                stopTtyd(existingHostname);
-                stopPinggy(existingHostname);
-                delete routes[existingHostname];
+                await deleteRouteState(existingHostname);
             }
         }
     }
@@ -394,6 +463,7 @@ async function registerService(vmid, hostname, ip, exposeArray, force = false, e
         if (item.mode === 'public') prefix = 'pb';
         else if (item.mode === 'private') prefix = 'pt';
         else if (item.mode === 'tcp') prefix = 'tcp';
+        else if (item.mode === 'secure_tcp') prefix = 'stcp';
         
         const uniqueHostname = `${prefix}${item.port}-${fullHostname}`;
         
@@ -429,7 +499,26 @@ async function registerService(vmid, hostname, ip, exposeArray, force = false, e
         }
 
         await createDnsRecord(uniqueHostname);
-        generatedUrls.push({ port: item.port, url: `https://${uniqueHostname}`, mode: item.mode });
+        if (item.mode === 'secure_tcp' && item.validityDays) {
+            console.log(`[Gateway] Provisioning Secure TCP for ${uniqueHostname} (Validity: ${item.validityDays} days)`);
+            const tokenResult = await createAccessServiceToken(`Token-${uniqueHostname}`, item.validityDays);
+            const appId = await createAccessApp(uniqueHostname);
+            await createAccessPolicy(appId, tokenResult.id);
+            
+            routes[uniqueHostname].serviceTokenId = tokenResult.id;
+            routes[uniqueHostname].accessAppId = appId;
+            
+            generatedUrls.push({ 
+                port: item.port, 
+                url: `https://${uniqueHostname}`, 
+                mode: item.mode,
+                clientId: tokenResult.client_id,
+                clientSecret: tokenResult.client_secret,
+                hostname: uniqueHostname
+            });
+        } else {
+            generatedUrls.push({ port: item.port, url: `https://${uniqueHostname}`, mode: item.mode });
+        }
     }
     saveState();
     await updateTunnelIngress();
@@ -489,8 +578,7 @@ setInterval(async () => {
             const idleMs = Date.now() - (data.lastActive || Date.now());
             if (idleMs > data.idleTimeout * 60000) {
                 console.log(`[Gateway] Sweeping idle route ${hostname} (inactive for >${data.idleTimeout}m)`);
-                stopTtyd(hostname);
-                delete routes[hostname];
+                await deleteRouteState(hostname);
                 stateChanged = true;
                 logAudit("System/Automation", "IDLE_TIMEOUT_SWEEP", `Automatically deleted idle route ${hostname}`);
             }
@@ -1037,9 +1125,7 @@ adminApp.delete('/services', async (req, res) => {
 
     let detailStr = port ? `Port ${port} for VMID ${vmid}` : `ALL routes for VMID ${vmid}`;
     for (const hostname of hostnamesToDelete) {
-        stopTtyd(hostname);
-        stopPinggy(hostname);
-        delete routes[hostname];
+        await deleteRouteState(hostname);
         deletedCount++;
     }
 
