@@ -617,6 +617,45 @@ async function discoverLxcDetails(vmid) {
     }
 }
 
+async function discoverVmDetails(vmid) {
+    await getPveTicket();
+    const headers = { 'Cookie': pveAuthCookie, 'CSRFPreventionToken': pveCsrfToken };
+
+    try {
+        // 1. Get Hostname from Config
+        const configRes = await pveAxios.get(`/api2/json/nodes/${PVE_NODE}/qemu/${vmid}/config`, { headers });
+        const hostname = configRes.data.data.name || `vm-${vmid}`;
+
+        // 2. Get active IP from QEMU Guest Agent Interfaces
+        const interfacesRes = await pveAxios.get(`/api2/json/nodes/${PVE_NODE}/qemu/${vmid}/agent/network-get-interfaces`, { headers });
+        const interfaces = interfacesRes.data.data.result;
+        
+        let ip = null;
+        if (interfaces && Array.isArray(interfaces)) {
+            for (const iface of interfaces) {
+                if (iface.name === 'lo') continue;
+                if (iface['ip-addresses']) {
+                    for (const ipInfo of iface['ip-addresses']) {
+                        if (ipInfo['ip-address-type'] === 'ipv4' && ipInfo['ip-address'] !== '127.0.0.1') {
+                            ip = ipInfo['ip-address'];
+                            break;
+                        }
+                    }
+                }
+                if (ip) break;
+            }
+        }
+
+        if (!ip) throw new Error("Could not find active IPv4 address from QEMU Guest Agent");
+
+        console.log(`[PVE] Auto-discovered VM ${vmid}: Hostname=${hostname}, IP=${ip}`);
+        return { hostname, ip };
+    } catch (e) {
+        console.error(`[PVE] Auto-discovery failed for VMID ${vmid}:`, e.response?.data || e.message);
+        throw new Error(`Failed to discover VM details (Guest Agent may not be running): ${e.message}`);
+    }
+}
+
 /**
  * @swagger
  * /login:
@@ -812,9 +851,15 @@ adminApp.post('/register', async (req, res) => {
  */
 adminApp.get('/discover/:vmid', async (req, res) => {
     const vmid = parseInt(req.params.vmid);
+    const envType = req.query.envType || 'lxc';
     if (!vmid) return res.status(400).json({ error: "Invalid VMID" });
     try {
-        const details = await discoverLxcDetails(vmid);
+        let details;
+        if (envType === 'qemu') {
+            details = await discoverVmDetails(vmid);
+        } else {
+            details = await discoverLxcDetails(vmid);
+        }
         res.json(details);
     } catch (e) {
         res.status(404).json({ error: e.message });

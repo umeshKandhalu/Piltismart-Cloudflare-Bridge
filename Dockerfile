@@ -38,4 +38,4 @@ EXPOSE 8883
 EXPOSE 1883
 
 # Use entrypoint script to launch services and report URL
-CMD ["/app/entrypoint.sh"]
+ENTRYPOINT ["/app/entrypoint.sh"]
