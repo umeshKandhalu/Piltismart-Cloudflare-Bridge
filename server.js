@@ -858,18 +858,20 @@ adminApp.post('/register', async (req, res) => {
  */
 adminApp.get('/discover/:vmid', async (req, res) => {
     const vmid = parseInt(req.params.vmid);
-    const envType = req.query.envType || 'lxc';
     if (!vmid) return res.status(400).json({ error: "Invalid VMID" });
+    
     try {
-        let details;
-        if (envType === 'qemu') {
-            details = await discoverVmDetails(vmid);
-        } else {
-            details = await discoverLxcDetails(vmid);
+        // Try QEMU first
+        try {
+            const details = await discoverVmDetails(vmid);
+            return res.json({ ...details, envType: 'qemu' });
+        } catch (qemuErr) {
+            // Fallback to LXC
+            const details = await discoverLxcDetails(vmid);
+            return res.json({ ...details, envType: 'lxc' });
         }
-        res.json(details);
     } catch (e) {
-        res.status(404).json({ error: e.message });
+        res.status(404).json({ error: "Could not auto-discover VM or LXC details." });
     }
 });
 
