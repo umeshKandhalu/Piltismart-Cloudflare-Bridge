@@ -572,6 +572,7 @@
                             <option value="private">Private (Auth)</option>
                             <option value="tcp">TCP (Raw)</option>
                             <option value="secure_tcp">Secure TCP (Service Token)</option>
+                            <option value="warp">Secure WARP Client</option>
                         </select>
                     </div>
                 </div>
@@ -780,13 +781,10 @@
                 modeSelect.value = 'public';
             }
 
-            const publicOption = modeSelect.querySelector('option[value="public"]');
             if (currentPort === 22) {
                 timeoutContainer.style.display = 'block';
-                publicOption.disabled = true;
             } else {
                 timeoutContainer.style.display = 'none';
-                publicOption.disabled = false;
             }
             updateModeUI();
         }
@@ -953,7 +951,40 @@
         }
 
         function updateModeUI() {
-            const mode = document.getElementById('reg-mode').value;
+            const type = document.getElementById('reg-type').value;
+            const port = parseInt(document.getElementById('reg-port').value);
+            const modeSelect = document.getElementById('reg-mode');
+            
+            // Enforce strict selection rules
+            Array.from(modeSelect.options).forEach(opt => {
+                opt.style.display = 'none';
+                opt.disabled = true;
+            });
+            
+            if (type === 'tls') {
+                modeSelect.querySelector('option[value="public"]').style.display = '';
+                modeSelect.querySelector('option[value="public"]').disabled = false;
+                modeSelect.querySelector('option[value="private"]').style.display = '';
+                modeSelect.querySelector('option[value="private"]').disabled = false;
+                if (!['public', 'private'].includes(modeSelect.value)) modeSelect.value = 'public';
+            } else if (type === 'tcp') {
+                if (port === 22) {
+                    modeSelect.querySelector('option[value="tcp"]').style.display = '';
+                    modeSelect.querySelector('option[value="tcp"]').disabled = false;
+                    modeSelect.value = 'tcp';
+                } else {
+                    modeSelect.querySelector('option[value="secure_tcp"]').style.display = '';
+                    modeSelect.querySelector('option[value="secure_tcp"]').disabled = false;
+                    modeSelect.value = 'secure_tcp';
+                }
+            } else if (type === 'udp') {
+                modeSelect.querySelector('option[value="warp"]').style.display = '';
+                modeSelect.querySelector('option[value="warp"]').disabled = false;
+                modeSelect.value = 'warp';
+            }
+            
+            // Existing logic
+            const mode = modeSelect.value;
             const validityContainer = document.getElementById('reg-validity-container');
             if (mode === 'secure_tcp') {
                 validityContainer.style.display = 'block';

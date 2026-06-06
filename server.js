@@ -411,6 +411,9 @@ async function updateTunnelIngress() {
         for (const [hostname, data] of Object.entries(routes)) {
             const dataPort = parseInt(data.target.split(':')[1]);
             
+            if (data.mode === 'warp') {
+                continue; // WARP uses Private Network routing, not Public Hostname ingress
+            }
             if (data.mode === 'tcp' || data.mode === 'secure_tcp') {
                 ingress.push({ hostname: hostname, service: `tcp://${data.target}` });
             } else {
@@ -889,8 +892,8 @@ adminApp.post('/register', async (req, res) => {
         if (!item.port || typeof item.port !== 'number' || item.port <= 0 || item.port > 65535) {
             return res.status(400).json({ error: `Invalid port: ${item.port}` });
         }
-        if (!['public', 'private', 'tcp', 'secure_tcp'].includes(item.mode)) {
-            return res.status(400).json({ error: `Invalid mode: ${item.mode} for port ${item.port}. Must be 'public', 'private', 'tcp', or 'secure_tcp'.` });
+        if (!['public', 'private', 'tcp', 'secure_tcp', 'warp'].includes(item.mode)) {
+            return res.status(400).json({ error: `Invalid mode: ${item.mode} for port ${item.port}. Must be 'public', 'private', 'tcp', 'secure_tcp', or 'warp'.` });
         }
         if (item.protocol && !['http', 'https'].includes(item.protocol)) {
             return res.status(400).json({ error: `Invalid protocol: ${item.protocol} for port ${item.port}. Must be 'http' or 'https'.` });
