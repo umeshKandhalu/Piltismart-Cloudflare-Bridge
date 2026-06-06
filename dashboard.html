@@ -562,7 +562,6 @@
                         <select id="reg-type" required onchange="updateModeUI()">
                             <option value="tls">TLS</option>
                             <option value="tcp">TCP</option>
-                            <option value="udp">UDP</option>
                         </select>
                     </div>
                     <div class="input-group">
@@ -572,7 +571,6 @@
                             <option value="private">Private (Auth)</option>
                             <option value="tcp">TCP (Raw)</option>
                             <option value="secure_tcp">Secure TCP (Service Token)</option>
-                            <option value="warp">Secure WARP Client</option>
                         </select>
                     </div>
                 </div>
@@ -902,8 +900,6 @@
             const typeVal = document.getElementById('reg-type').value;
             if (typeVal === 'tls') {
                 exposeItem.protocol = 'https';
-            } else if (typeVal === 'udp') {
-                exposeItem.protocol = 'udp'; // Future proofing
             }
             if (port === 22) {
                 exposeItem.idleTimeout = parseInt(document.getElementById('reg-timeout').value) || 0;
@@ -977,10 +973,6 @@
                     modeSelect.querySelector('option[value="secure_tcp"]').disabled = false;
                     modeSelect.value = 'secure_tcp';
                 }
-            } else if (type === 'udp') {
-                modeSelect.querySelector('option[value="warp"]').style.display = '';
-                modeSelect.querySelector('option[value="warp"]').disabled = false;
-                modeSelect.value = 'warp';
             }
             
             // Existing logic
