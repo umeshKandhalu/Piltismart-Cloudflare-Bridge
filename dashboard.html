@@ -1242,10 +1242,18 @@
                     }
                     let urlHtml = `<a href="${svc.url}" target="_blank" class="card-url">${svc.hostname}</a>`;
                     if (svc.mode === 'tcp' && svc.pinggyUrl) {
+                        let copyText = svc.pinggyUrl;
+                        try {
+                            const urlObj = new URL(svc.pinggyUrl);
+                            if (svc.target.endsWith(':22')) {
+                                copyText = `ssh -p ${urlObj.port} root@${urlObj.hostname}`;
+                            }
+                        } catch(e) {}
+                        
                         urlHtml = `
-                            <div style="display:flex; align-items:center; gap:6px;" title="Click to copy Pinggy URL" onclick="navigator.clipboard.writeText('${svc.pinggyUrl}')">
+                            <div style="display:flex; align-items:center; gap:6px;" title="Click to copy connection command" onclick="navigator.clipboard.writeText('${copyText}'); alert('Copied to clipboard: ' + '${copyText}');">
                                 <span style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.3); font-weight:bold; font-size: 0.7rem; padding: 2px 4px; border-radius: 4px;">PINGGY</span>
-                                <span style="font-family: monospace; font-size: 0.85rem; color: var(--text-main); cursor: pointer; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 1px;">${svc.pinggyUrl}</span>
+                                <span style="font-family: monospace; font-size: 0.85rem; color: var(--text-main); cursor: pointer; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 1px;">${copyText}</span>
                             </div>
                         `;
                     }
