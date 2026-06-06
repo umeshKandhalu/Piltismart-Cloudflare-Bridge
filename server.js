@@ -411,7 +411,7 @@ async function updateTunnelIngress() {
         for (const [hostname, data] of Object.entries(routes)) {
             const dataPort = parseInt(data.target.split(':')[1]);
             
-            if (data.mode === 'tcp') {
+            if (data.mode === 'tcp' || data.mode === 'secure_tcp') {
                 ingress.push({ hostname: hostname, service: `tcp://${data.target}` });
             } else {
                 // All HTTP and SSH (ttyd) routes go through the Express proxy
