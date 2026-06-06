@@ -1183,11 +1183,15 @@
             
             for (const vmid of vmidKeys) {
                 const svcs = grouped[vmid];
+                const ip = svcs.length > 0 ? svcs[0].target.split(':')[0] : 'Unknown';
                 
                 html += `
                     <div class="vmid-group">
                         <div class="vmid-header">
-                            <span>LXC Container: <b>VMID ${vmid}</b></span>
+                            <div style="display: flex; flex-direction: column;">
+                                <span>LXC Container: <b>VMID ${vmid}</b></span>
+                                <span style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; font-family: monospace;">IP: ${ip}</span>
+                            </div>
                             <div class="vmid-header-actions">
                                 <button class="btn-primary btn-sm" onclick="openRegister(${vmid})">
                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
@@ -1205,7 +1209,7 @@
                                     <tr>
                                         <th onclick="setSort('status')" class="${getSortClass('status')}">Status</th>
                                         <th onclick="setSort('hostname')" class="${getSortClass('hostname')}">Connection Link</th>
-                                        <th onclick="setSort('target')" class="${getSortClass('target')}">Target</th>
+                                        <th onclick="setSort('target')" class="${getSortClass('target')}">LXC Port</th>
                                         <th class="no-sort">Service</th>
                                         <th onclick="setSort('mode')" class="${getSortClass('mode')}">Mode</th>
                                         <th class="no-sort">Active</th>
@@ -1252,7 +1256,6 @@
                         
                         urlHtml = `
                             <div style="display:flex; align-items:center; gap:6px;" title="Click to copy connection command" onclick="navigator.clipboard.writeText('${copyText}'); alert('Copied to clipboard: ' + '${copyText}');">
-                                <span style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.3); font-weight:bold; font-size: 0.7rem; padding: 2px 4px; border-radius: 4px;">PINGGY</span>
                                 <span style="font-family: monospace; font-size: 0.85rem; color: var(--text-main); cursor: pointer; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 1px;">${copyText}</span>
                             </div>
                         `;
@@ -1262,7 +1265,7 @@
                         <tr>
                             <td>${getStatusBadge(svc.status)}</td>
                             <td>${urlHtml}</td>
-                            <td><span class="target-tag">${svc.protocol === 'https' ? '<span style="color:var(--success);font-weight:bold;margin-right:4px;">[HTTPS]</span>' : ''}${svc.target}</span></td>
+                            <td><span class="target-tag">${svc.protocol === 'https' ? '<span style="color:var(--success);font-weight:bold;margin-right:4px;">[HTTPS]</span>' : ''}${svc.target.split(':')[1]}</span></td>
                             <td><span class="target-tag" style="background: rgba(59, 130, 246, 0.15); color: var(--accent); border-color: rgba(59,130,246,0.3); font-weight: 600;">${getPortName(svc.target)}</span></td>
                             ${modeHtml}
                             <td style="text-align: center;">${activeStr}</td>
