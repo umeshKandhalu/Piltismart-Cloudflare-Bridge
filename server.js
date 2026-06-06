@@ -121,7 +121,77 @@ function stopTtyd(hostname) {
     }
 }
 
-// Bootstrap existing ttyd routes
+// Native SSH TCP Tunneling State (Pinggy)
+const pinggyInstances = {}; // hostname -> { proc }
+
+function startPinggy(hostname, targetIp, port) {
+    if (pinggyInstances[hostname]) return;
+
+    console.log(`[Gateway] Spawning Pinggy TCP tunnel for ${hostname} to target ${targetIp}:${port}`);
+    const proc = spawn('ssh', [
+        '-o', 'StrictHostKeyChecking=no',
+        '-p', '443',
+        `-R0:localhost:${port}`,
+        'tcp@a.pinggy.io'
+    ]);
+
+    let urlCaptured = false;
+
+    const parseOutput = (data) => {
+        const text = data.toString();
+        // Look for tcp://xyz.pinggy.link:port
+        const match = text.match(/(tcp:\/\/[a-zA-Z0-9.-]+:\d+)/);
+        if (match && !urlCaptured) {
+            urlCaptured = true;
+            const pinggyUrl = match[1];
+            console.log(`[Pinggy] Successfully acquired public TCP endpoint for ${hostname}: ${pinggyUrl}`);
+            if (routes[hostname]) {
+                routes[hostname].pinggyUrl = pinggyUrl;
+                saveState();
+            }
+        }
+    };
+
+    proc.stdout.on('data', parseOutput);
+    proc.stderr.on('data', parseOutput);
+
+    proc.on('error', (err) => {
+        console.error(`[Pinggy] Process error for ${hostname}:`, err);
+    });
+
+    proc.on('close', (code) => {
+        console.log(`[Pinggy] Tunnel process for ${hostname} exited with code ${code}.`);
+        delete pinggyInstances[hostname];
+        
+        // Pinggy free tier times out after 60 mins. Auto-respawn if route still exists and is mode tcp.
+        if (routes[hostname] && routes[hostname].mode === 'tcp') {
+            console.log(`[Pinggy] Auto-respawning TCP tunnel for ${hostname} in 5 seconds...`);
+            setTimeout(() => {
+                if (routes[hostname] && routes[hostname].mode === 'tcp') {
+                    startPinggy(hostname, targetIp, port);
+                }
+            }, 5000);
+        }
+    });
+
+    pinggyInstances[hostname] = { proc };
+}
+
+function stopPinggy(hostname) {
+    if (pinggyInstances[hostname]) {
+        console.log(`[Gateway] Killing Pinggy process for ${hostname}`);
+        try {
+            pinggyInstances[hostname].proc.kill();
+        } catch(e) {}
+        delete pinggyInstances[hostname];
+    }
+    if (routes[hostname]) {
+        delete routes[hostname].pinggyUrl;
+        saveState();
+    }
+}
+
+// Bootstrap existing ttyd and pinggy routes
 for (const [hostname, route] of Object.entries(routes)) {
     route.activeConnections = 0;
     if (route.target && route.target.endsWith(':22')) {
@@ -129,6 +199,10 @@ for (const [hostname, route] of Object.entries(routes)) {
         if (route.idleTimeout) {
             route.lastActive = Date.now();
         }
+    }
+    if (route.mode === 'tcp') {
+        const [targetIp, port] = route.target.split(':');
+        startPinggy(hostname, targetIp, port);
     }
 }
 
@@ -307,6 +381,7 @@ async function registerService(vmid, hostname, ip, exposeArray, force = false) {
         for (const [existingHostname, data] of Object.entries(routes)) {
             if (data.vmid === vmid) {
                 stopTtyd(existingHostname);
+                stopPinggy(existingHostname);
                 delete routes[existingHostname];
             }
         }
@@ -346,6 +421,10 @@ async function registerService(vmid, hostname, ip, exposeArray, force = false) {
 
         if (item.port === 22) {
             startTtyd(uniqueHostname, ip);
+        }
+
+        if (item.mode === 'tcp') {
+            startPinggy(uniqueHostname, ip, item.port);
         }
 
         await createDnsRecord(uniqueHostname);
@@ -905,6 +984,7 @@ adminApp.delete('/services', async (req, res) => {
     let detailStr = port ? `Port ${port} for VMID ${vmid}` : `ALL routes for VMID ${vmid}`;
     for (const hostname of hostnamesToDelete) {
         stopTtyd(hostname);
+        stopPinggy(hostname);
         delete routes[hostname];
         deletedCount++;
     }

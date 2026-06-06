@@ -1236,11 +1236,20 @@
                             </td>
                         `;
                     }
+                    let urlHtml = `<a href="${svc.url}" target="_blank" class="card-url">${svc.hostname}</a>`;
+                    if (svc.mode === 'tcp' && svc.pinggyUrl) {
+                        urlHtml = `
+                            <div style="display:flex; align-items:center; gap:6px;" title="Click to copy Pinggy URL" onclick="navigator.clipboard.writeText('${svc.pinggyUrl}')">
+                                <span style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.3); font-weight:bold; font-size: 0.7rem; padding: 2px 4px; border-radius: 4px;">PINGGY</span>
+                                <span style="font-family: monospace; font-size: 0.85rem; color: var(--text-main); cursor: pointer; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 1px;">${svc.pinggyUrl}</span>
+                            </div>
+                        `;
+                    }
                     
                     html += `
                         <tr>
                             <td>${getStatusBadge(svc.status)}</td>
-                            <td><a href="${svc.url}" target="_blank" class="card-url">${svc.hostname}</a></td>
+                            <td>${urlHtml}</td>
                             <td><span class="target-tag">${svc.protocol === 'https' ? '<span style="color:var(--success);font-weight:bold;margin-right:4px;">[HTTPS]</span>' : ''}${svc.target}</span></td>
                             <td><span class="target-tag" style="background: rgba(59, 130, 246, 0.15); color: var(--accent); border-color: rgba(59,130,246,0.3); font-weight: 600;">${getPortName(svc.target)}</span></td>
                             ${modeHtml}
