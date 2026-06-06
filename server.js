@@ -131,7 +131,7 @@ function startPinggy(hostname, targetIp, port) {
     const proc = spawn('ssh', [
         '-o', 'StrictHostKeyChecking=no',
         '-p', '443',
-        `-R0:localhost:${port}`,
+        `-R0:${targetIp}:${port}`,
         'tcp@a.pinggy.io'
     ]);
 
@@ -889,7 +889,7 @@ adminApp.get('/services', async (req, res) => {
         if (filterPort && parseInt(data.target.split(':')[1]) !== filterPort) continue;
         if (mode && data.mode !== mode) continue;
 
-        const vmidStr = data.vmid ? data.vmid.toString() : 'unknown';
+        const vmidStr = data.vmid !== undefined ? data.vmid.toString() : 'unknown';
         if (!groupedServices[vmidStr]) {
             groupedServices[vmidStr] = [];
         }
@@ -948,8 +948,8 @@ adminApp.get('/services', async (req, res) => {
 adminApp.delete('/services', async (req, res) => {
     const { vmid, port, mode } = req.body;
     
-    if (!vmid || typeof vmid !== 'number' || vmid <= 0) {
-        return res.status(400).json({ error: "Invalid payload: 'vmid' must be a positive integer." });
+    if (vmid === undefined || typeof vmid !== 'number' || vmid < 0) {
+        return res.status(400).json({ error: "Invalid payload: 'vmid' must be a non-negative integer." });
     }
 
     let deletedCount = 0;

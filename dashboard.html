@@ -761,7 +761,7 @@
         
         function openRegister(vmid = '') { 
             document.getElementById('register-overlay').classList.remove('hidden');
-            if (vmid) {
+            if (vmid !== '') {
                 document.getElementById('reg-vmid').value = vmid;
                 autoDiscover();
             }
