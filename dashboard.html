@@ -517,6 +517,14 @@
             
             <form id="register-form" onsubmit="submitRegister(event)">
                 <div class="input-group">
+                    <label>Environment Type</label>
+                    <div style="display: flex; gap: 15px; margin-top: 5px;">
+                        <label style="font-weight: normal;"><input type="radio" name="envType" value="lxc" checked onchange="autoDiscover()"> LXC Container</label>
+                        <label style="font-weight: normal;"><input type="radio" name="envType" value="qemu" onchange="autoDiscover()"> Virtual Machine (QEMU)</label>
+                    </div>
+                </div>
+
+                <div class="input-group" style="margin-top: 15px;">
                     <label>Proxmox VMID</label>
                     <input type="number" id="reg-vmid" required placeholder="e.g. 101" onblur="autoDiscover()">
                 </div>
@@ -837,11 +845,12 @@
             const vmid = document.getElementById('reg-vmid').value;
             if (!vmid || !apiKey) return;
             
+            const envType = document.querySelector('input[name="envType"]:checked').value;
             const hostInput = document.getElementById('reg-hostname');
             const ipInput = document.getElementById('reg-ip');
             
             try {
-                const res = await fetch(`/discover/${vmid}`, { headers: { 'x-api-key': apiKey } });
+                const res = await fetch(`/discover/${vmid}?envType=${envType}`, { headers: { 'x-api-key': apiKey } });
                 if (res.ok) {
                     const details = await res.json();
                     hostInput.value = details.hostname;
@@ -869,6 +878,7 @@
 
             const payload = {
                 vmid: parseInt(document.getElementById('reg-vmid').value),
+                envType: document.querySelector('input[name="envType"]:checked').value,
                 hostname: document.getElementById('reg-hostname').value,
                 ip: document.getElementById('reg-ip').value,
                 force: document.getElementById('reg-force').checked,
@@ -1185,11 +1195,14 @@
                 const svcs = grouped[vmid];
                 const ip = svcs.length > 0 ? svcs[0].target.split(':')[0] : 'Unknown';
                 
+                const isQemu = svcs.length > 0 && svcs[0].envType === 'qemu';
+                const title = isQemu ? `Virtual Machine: <b>VMID ${vmid}</b>` : `LXC Container: <b>VMID ${vmid}</b>`;
+                
                 html += `
                     <div class="vmid-group">
                         <div class="vmid-header">
                             <div style="display: flex; flex-direction: column;">
-                                <span>LXC Container: <b>VMID ${vmid}</b></span>
+                                <span>${title}</span>
                                 <span style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; font-family: monospace;">IP: ${ip}</span>
                             </div>
                             <div class="vmid-header-actions">

@@ -375,7 +375,7 @@ async function updateTunnelIngress() {
     }
 }
 
-async function registerService(vmid, hostname, ip, exposeArray, force = false) {
+async function registerService(vmid, hostname, ip, exposeArray, force = false, envType = 'lxc') {
     if (force) {
         // Clear old routes for this VMID from state
         for (const [existingHostname, data] of Object.entries(routes)) {
@@ -406,6 +406,7 @@ async function registerService(vmid, hostname, ip, exposeArray, force = false) {
             protocol: item.protocol || 'http',
             mode: item.mode,
             vmid: vmid,
+            envType: envType,
             status: 'pending',
             lastChecked: new Date().toISOString(),
             createdAt: new Date().toISOString(),
@@ -784,7 +785,8 @@ adminApp.get('/audit', (req, res) => {
  *       500: { description: "Auto-discovery failed" }
  */
 adminApp.post('/register', async (req, res) => {
-    let { vmid, hostname, ip, expose, force } = req.body;
+    let { vmid, hostname, ip, expose, force, envType } = req.body;
+    envType = envType || 'lxc';
     
     // Strict Payload Validation
     if (typeof vmid !== 'number' || vmid < 0) {
@@ -816,8 +818,13 @@ adminApp.post('/register', async (req, res) => {
             return res.status(400).json({ error: "For Host routing (vmid 0), 'hostname' and 'ip' must be explicitly provided in the payload." });
         }
         try {
-            console.log(`[Gateway] Auto-discovering details for VMID ${vmid}...`);
-            const details = await discoverLxcDetails(vmid);
+            console.log(`[Gateway] Auto-discovering details for VMID ${vmid} (Type: ${envType})...`);
+            let details;
+            if (envType === 'qemu') {
+                details = await discoverVmDetails(vmid);
+            } else {
+                details = await discoverLxcDetails(vmid);
+            }
             hostname = hostname || details.hostname;
             ip = ip || details.ip;
         } catch (e) {
@@ -827,7 +834,7 @@ adminApp.post('/register', async (req, res) => {
 
 
     try {
-        const urls = await registerService(vmid, hostname, ip, expose, !!force);
+        const urls = await registerService(vmid, hostname, ip, expose, !!force, envType);
         logAudit(req.user, 'REGISTER_SERVICE', `Registered route(s) for VMID ${vmid} (${hostname}): ${urls.map(u => u.url).join(', ')}`);
         res.json({ message: "Registered successfully", urls });
     } catch (e) {
