@@ -363,7 +363,7 @@ async function createAccessPolicy(appId, tokenId) {
     console.log(`[CF Access] Creating Policy for App ${appId} with Token ${tokenId}`);
     await cfAxios.post(`/accounts/${CF_ACCOUNT_ID}/access/apps/${appId}/policies`, {
         name: "Allow Service Token Only",
-        decision: "allow",
+        decision: "non_identity",
         include: [{ service_token: { token_id: tokenId } }]
     });
 }
