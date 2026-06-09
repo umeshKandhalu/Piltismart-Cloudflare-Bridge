@@ -474,7 +474,8 @@ function deployBeszelAgent(vmid, hostname, ip, envType, onData, onExit) {
         return;
     }
 
-    const installCmd = `rm -f /etc/systemd/system/beszel-agent.service && curl -sL https://raw.githubusercontent.com/henrygd/beszel/main/supplemental/scripts/install-agent.sh | bash -s -- -p 45876 -k "${pubKey}" --auto-update true`;
+    const ensureCurl = `if ! command -v curl >/dev/null 2>&1; then apt-get update && apt-get install -y curl || apk add curl || yum install -y curl || dnf install -y curl; fi;`;
+    const installCmd = `${ensureCurl} rm -f /etc/systemd/system/beszel-agent.service && curl -sL https://raw.githubusercontent.com/henrygd/beszel/main/supplemental/scripts/install-agent.sh | bash -s -- -p 45876 -k "${pubKey}" --auto-update true`;
     
     let remoteScript = "";
     if (envType === 'qemu') {
@@ -508,15 +509,39 @@ function deployBeszelAgent(vmid, hostname, ip, envType, onData, onExit) {
         if(onData) onData(data.toString());
     });
     
-    proc.on('close', (code) => {
+    proc.on('close', async (code) => {
         if (code !== 0) {
             console.error(`[Gateway] Failed to deploy Beszel agent to VMID ${vmid}`);
             if(onData) onData(`\n[Gateway] Failed to deploy Beszel agent (Exit Code ${code})\n`);
+            if(onExit) onExit(code);
         } else {
             console.log(`[Gateway] Successfully deployed Beszel agent to VMID ${vmid}`);
-            if(onData) onData(`\n[Gateway] Successfully deployed Beszel agent to VMID ${vmid}\n`);
+            if(onData) onData(`\n[Gateway] Installation finished. Verifying agent status on ${ip}:45876...\n`);
+            
+            let isUp = false;
+            for (let i = 0; i < 5; i++) {
+                try {
+                    await new Promise((resolve, reject) => {
+                        const s = require('net').createConnection(45876, ip);
+                        s.on('connect', () => { s.destroy(); resolve(); });
+                        s.on('error', (e) => { s.destroy(); reject(e); });
+                        setTimeout(() => { s.destroy(); reject(new Error("timeout")); }, 1000);
+                    });
+                    isUp = true;
+                    break;
+                } catch(e) {
+                    await new Promise(r => setTimeout(r, 2000));
+                }
+            }
+            
+            if (isUp) {
+                if(onData) onData(`[Gateway] Verification SUCCESS: Agent is actively listening on ${ip}:45876.\n`);
+                if(onExit) onExit(0);
+            } else {
+                if(onData) onData(`[Gateway] Verification FAILED: Agent is not reachable on ${ip}:45876. Please check firewall or container network.\n`);
+                if(onExit) onExit(1);
+            }
         }
-        if(onExit) onExit(code);
     });
 }
 
