@@ -678,6 +678,15 @@
         </div>
     </div>
     
+    <div id="deploy-progress-overlay" class="overlay hidden">
+        <div class="modal" style="max-width: 800px;">
+            <button class="modal-close" onclick="closeDeployProgress()" id="deploy-close-btn" style="display: none;">&times;</button>
+            <h2 id="deploy-progress-title" style="margin-bottom: 1rem;">Deploying Beszel Agent...</h2>
+            <div id="deploy-progress-content" style="background: rgba(0,0,0,0.5); color: #10b981; border: 1px solid var(--card-border); padding: 15px; font-family: monospace; font-size: 0.85rem; border-radius: 8px; height: 350px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; margin-bottom: 1rem; text-align: left;"></div>
+            <button class="modal-btn" onclick="closeDeployProgress()" id="deploy-progress-btn" style="display: none;">Close</button>
+        </div>
+    </div>
+    
     <div id="confirm-overlay" class="overlay hidden">
         <div class="modal" style="max-width: 600px; text-align: center;">
             <h2 id="confirm-title" style="color: var(--text-main); margin-bottom: 0.5rem;">Confirm Action</h2>
@@ -1745,20 +1754,47 @@
             }
 
             try {
+                document.getElementById('deploy-progress-overlay').classList.remove('hidden');
+                document.getElementById('deploy-progress-content').innerHTML = '';
+                document.getElementById('deploy-progress-title').innerText = `Deploying Beszel Agent (VMID ${vmid})...`;
+                document.getElementById('deploy-progress-btn').style.display = 'none';
+                document.getElementById('deploy-close-btn').style.display = 'none';
+                
                 const res = await fetch('/api/beszel/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
                     body: JSON.stringify({ vmid: parseInt(vmid) })
                 });
                 
-                if (res.ok) {
-                    customAlert('Success', 'Deployment triggered successfully! The system should appear in your Beszel Dashboard momentarily.');
+                if (!res.ok) {
+                    try {
+                        const data = await res.json();
+                        customAlert('Error', data.error || 'Failed to trigger deployment.');
+                    } catch(err) {
+                        customAlert('Error', 'Failed to trigger deployment.');
+                    }
+                    closeDeployProgress();
                 } else {
-                    const data = await res.json();
-                    customAlert('Error', data.error || 'Failed to trigger deployment.');
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    const contentBox = document.getElementById('deploy-progress-content');
+                    
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        
+                        // We use innerText to safely append the stream without risking XSS from logs
+                        contentBox.appendChild(document.createTextNode(decoder.decode(value, { stream: true })));
+                        contentBox.scrollTop = contentBox.scrollHeight;
+                    }
+                    
+                    document.getElementById('deploy-progress-title').innerText = `Deployment Complete`;
+                    document.getElementById('deploy-progress-btn').style.display = 'block';
+                    document.getElementById('deploy-close-btn').style.display = 'block';
                 }
             } catch (e) {
                 customAlert('Error', 'Connection error.');
+                closeDeployProgress();
             }
             
             if (btn) {

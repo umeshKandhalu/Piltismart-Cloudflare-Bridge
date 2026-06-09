@@ -446,7 +446,7 @@ async function deleteRouteState(hostname) {
     delete routes[hostname];
 }
 
-function deployBeszelAgent(vmid, hostname, ip, envType) {
+function deployBeszelAgent(vmid, hostname, ip, envType, onData, onExit) {
     if (!vmid || vmid === 0) return;
     
     let pubKey = "";
@@ -495,13 +495,28 @@ function deployBeszelAgent(vmid, hostname, ip, envType) {
     const finalRemoteScriptB64 = Buffer.from(finalRemoteScript).toString('base64');
     const sshCmd = `echo ${finalRemoteScriptB64} | sshpass -p '${PVE_PASSWORD}' ssh -o StrictHostKeyChecking=no root@${hostIP} "ssh -o StrictHostKeyChecking=no ${PVE_NODE} 'base64 -d | bash'"`;
 
+    if (onData) onData(`[Gateway] Auto-deploying Beszel agent to VMID ${vmid} (Type: ${envType})...\n`);
     console.log(`[Gateway] Auto-deploying Beszel agent to VMID ${vmid} (Type: ${envType})...`);
-    exec(sshCmd, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`[Gateway] Failed to deploy Beszel agent to VMID ${vmid}:`, error.message);
+    
+    const proc = spawn('bash', ['-c', sshCmd]);
+    
+    proc.stdout.on('data', (data) => {
+        if(onData) onData(data.toString());
+    });
+    
+    proc.stderr.on('data', (data) => {
+        if(onData) onData(data.toString());
+    });
+    
+    proc.on('close', (code) => {
+        if (code !== 0) {
+            console.error(`[Gateway] Failed to deploy Beszel agent to VMID ${vmid}`);
+            if(onData) onData(`\n[Gateway] Failed to deploy Beszel agent (Exit Code ${code})\n`);
         } else {
             console.log(`[Gateway] Successfully deployed Beszel agent to VMID ${vmid}`);
+            if(onData) onData(`\n[Gateway] Successfully deployed Beszel agent to VMID ${vmid}\n`);
         }
+        if(onExit) onExit(code);
     });
 }
 
@@ -1082,12 +1097,28 @@ adminApp.post('/api/beszel/register', async (req, res) => {
             return res.status(404).json({ error: "Could not discover VM details" });
         }
         
-        deployBeszelAgent(vmid, details.hostname, details.ip, envType);
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Transfer-Encoding', 'chunked');
+        res.write(`Starting deployment for VMID ${vmid}...\n`);
         
-        res.json({ success: true, message: `Deployment triggered for VMID ${vmid}` });
+        deployBeszelAgent(vmid, details.hostname, details.ip, envType, 
+            (data) => {
+                res.write(data);
+            },
+            (code) => {
+                res.write(`\nDeployment process exited with code ${code}.\n`);
+                res.end();
+            }
+        );
+        
     } catch (e) {
         console.error("[Gateway] Manual Beszel deploy error:", e);
-        res.status(500).json({ error: e.message });
+        if (!res.headersSent) {
+            res.status(500).json({ error: e.message });
+        } else {
+            res.write(`\nError: ${e.message}\n`);
+            res.end();
+        }
     }
 });
 
