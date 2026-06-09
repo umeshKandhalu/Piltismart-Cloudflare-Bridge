@@ -536,12 +536,6 @@ function deployBeszelAgent(vmid, hostname, ip, envType, onData, onExit) {
             
             if (isUp) {
                 if(onData) onData(`[Gateway] Verification SUCCESS: Agent is actively listening on ${ip}:45876.\n`);
-                try {
-                    await registerService(vmid, hostname, ip, [{ port: 45876, protocol: 'tcp', mode: 'tcp' }], false, envType);
-                    if(onData) onData(`[Gateway] Auto-configured TCP route for Beszel Agent on port 45876.\n`);
-                } catch(routeErr) {
-                    if(onData) onData(`[Gateway] TCP Route for 45876 not added: ${routeErr.message}\n`);
-                }
                 if(onExit) onExit(0);
             } else {
                 if(onData) onData(`[Gateway] Verification FAILED: Agent is not reachable on ${ip}:45876. Please check firewall or container network.\n`);

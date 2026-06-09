@@ -1727,6 +1727,25 @@
                         </tr>
                     `;
                 }
+                
+                if (beszelStatus === 'active' && beszelUrl !== '#' && sysName) {
+                    const beszelRouteUrl = `${beszelUrl}/__sso__?token=${encodeURIComponent(apiKey)}&redirect=/system/${sysName}`;
+                    html += `
+                        <tr style="background: rgba(16, 185, 129, 0.05);">
+                            <td>${getStatusBadge('active')}</td>
+                            <td><a href="${beszelRouteUrl}" target="_blank" class="card-url" style="color: var(--success); text-decoration: underline;">${sysName} (Beszel)</a></td>
+                            <td><span class="target-tag">Beszel UI</span></td>
+                            <td><span class="target-tag" style="background: rgba(16, 185, 129, 0.15); color: var(--success); border-color: rgba(16, 185, 129, 0.3); font-weight: 600;">Beszel Hub</span></td>
+                            <td style="text-transform: capitalize;">public</td>
+                            <td style="text-align: center;">--</td>
+                            <td class="metric-value">--</td>
+                            <td class="metric-value">--</td>
+                            <td class="metric-value">--</td>
+                            <td class="date-tag">--</td>
+                            <td></td>
+                        </tr>
+                    `;
+                }
 
                 html += `
                                 </tbody>
