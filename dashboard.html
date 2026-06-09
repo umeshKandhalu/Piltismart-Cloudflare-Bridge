@@ -1767,13 +1767,22 @@
                 });
                 
                 if (!res.ok) {
+                    let errMsg = 'Failed to trigger deployment.';
                     try {
                         const data = await res.json();
-                        customAlert('Error', data.error || 'Failed to trigger deployment.');
-                    } catch(err) {
-                        customAlert('Error', 'Failed to trigger deployment.');
-                    }
-                    closeDeployProgress();
+                        errMsg = data.error || errMsg;
+                    } catch(err) {}
+                    
+                    const contentBox = document.getElementById('deploy-progress-content');
+                    const errSpan = document.createElement('span');
+                    errSpan.style.color = 'var(--danger)';
+                    errSpan.style.fontWeight = 'bold';
+                    errSpan.innerText = `\n[Error] ${errMsg}\n`;
+                    contentBox.appendChild(errSpan);
+                    
+                    document.getElementById('deploy-progress-title').innerText = `Deployment Failed`;
+                    document.getElementById('deploy-progress-btn').style.display = 'block';
+                    document.getElementById('deploy-close-btn').style.display = 'block';
                 } else {
                     const reader = res.body.getReader();
                     const decoder = new TextDecoder();
@@ -1793,8 +1802,16 @@
                     document.getElementById('deploy-close-btn').style.display = 'block';
                 }
             } catch (e) {
-                customAlert('Error', 'Connection error.');
-                closeDeployProgress();
+                const contentBox = document.getElementById('deploy-progress-content');
+                const errSpan = document.createElement('span');
+                errSpan.style.color = 'var(--danger)';
+                errSpan.style.fontWeight = 'bold';
+                errSpan.innerText = `\n[Connection Error] ${e.message}\n`;
+                contentBox.appendChild(errSpan);
+                
+                document.getElementById('deploy-progress-title').innerText = `Deployment Failed`;
+                document.getElementById('deploy-progress-btn').style.display = 'block';
+                document.getElementById('deploy-close-btn').style.display = 'block';
             }
             
             if (btn) {
