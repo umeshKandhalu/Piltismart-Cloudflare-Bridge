@@ -6,6 +6,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     ca-certificates \
     openssh-client \
+    sshpass \
     && wget -qO /usr/local/bin/ttyd https://github.com/tsl0922/ttyd/releases/download/1.7.7/ttyd.x86_64 \
     && chmod +x /usr/local/bin/ttyd \
     && wget -qO /usr/local/bin/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \

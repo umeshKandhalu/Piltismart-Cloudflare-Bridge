@@ -159,6 +159,10 @@
                 const data = await response.json();
 
                 if (response.ok && data.token) {
+                    const domain = window.location.hostname.split('.').slice(-2).join('.');
+                    document.cookie = `gateway_token=${data.token}; domain=${domain}; path=/; max-age=86400; secure; samesite=lax`;
+                    document.cookie = `gateway_user=${encodeURIComponent(username)}; domain=${domain}; path=/; max-age=86400; secure; samesite=lax`;
+                    
                     const urlParams = new URLSearchParams(window.location.search);
                     const redirectUrl = urlParams.get('redirect') || '/';
                     const separator = redirectUrl.includes('?') ? '&' : '?';

@@ -7,7 +7,7 @@ const swaggerJsdoc = require('swagger-jsdoc');
 const net = require('net');
 const fs = require('fs');
 const crypto = require('crypto');
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 
 // Environment Variables
 const TB_SERVER = process.env.TB_SERVER || 'https://tb.piltismart.com';
@@ -446,7 +446,79 @@ async function deleteRouteState(hostname) {
     delete routes[hostname];
 }
 
+function deployBeszelAgent(vmid, hostname, ip, envType) {
+    if (!vmid || vmid === 0) return;
+    
+    let pubKey = "";
+    const pubKeyPath = '/beszel_data/id_ed25519.pub';
+    const privKeyPath = '/beszel_data/id_ed25519';
+    if (!fs.existsSync(pubKeyPath) && fs.existsSync(privKeyPath)) {
+        try {
+            require('child_process').execSync(`ssh-keygen -y -f ${privKeyPath} > ${pubKeyPath}`);
+        } catch(e) {
+            console.error("[Gateway] Failed to generate Beszel pub key:", e.message);
+        }
+    }
+    
+    if (fs.existsSync(pubKeyPath)) {
+        pubKey = fs.readFileSync(pubKeyPath, 'utf8').trim();
+    } else {
+        console.error("[Gateway] Cannot auto-deploy Beszel Agent: Public Key not found.");
+        return;
+    }
+
+    let hostIP = '';
+    try {
+        hostIP = new URL(PVE_URL).hostname;
+    } catch(e) {
+        return;
+    }
+
+    const installCmd = `rm -f /etc/systemd/system/beszel-agent.service && curl -sL https://raw.githubusercontent.com/henrygd/beszel/main/supplemental/scripts/install-agent.sh | bash -s -- -p 45876 -k \\"${pubKey}\\" --auto-update true`;
+    
+    let remoteScript = "";
+    if (envType === 'qemu') {
+        remoteScript = `qm guest exec ${vmid} -- bash -c "${installCmd}"`;
+    } else {
+        remoteScript = `pct exec ${vmid} -- bash -c "${installCmd}"`;
+    }
+
+    const sqlQuery = `DELETE FROM systems WHERE name = '${hostname}' OR host = '${ip}'; INSERT INTO systems (name, host, port, status, info, users, created, updated) VALUES ('${hostname}', '${ip}', '45876', 'pending', '{}', (SELECT json_group_array(id) FROM users), datetime('now'), datetime('now'));`;
+    const sqlBase64 = Buffer.from(sqlQuery).toString('base64');
+
+    const sqliteCmd = `echo ${sqlBase64} | base64 -d > /tmp/query.sql && sqlite3 /opt/gateway/beszel_data/data.db < /tmp/query.sql`;
+    const restartCmd = `docker restart beszel`;
+    const hubSetupCmd = `lxc-attach -n 999 -- bash -c "${sqliteCmd} && ${restartCmd}"`;
+
+    const finalRemoteScript = `${remoteScript} && ${hubSetupCmd}`;
+
+    const finalRemoteScriptB64 = Buffer.from(finalRemoteScript).toString('base64');
+    const sshCmd = `echo ${finalRemoteScriptB64} | sshpass -p '${PVE_PASSWORD}' ssh -o StrictHostKeyChecking=no root@${hostIP} "ssh -o StrictHostKeyChecking=no ${PVE_NODE} 'base64 -d | bash'"`;
+
+    console.log(`[Gateway] Auto-deploying Beszel agent to VMID ${vmid} (Type: ${envType})...`);
+    exec(sshCmd, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`[Gateway] Failed to deploy Beszel agent to VMID ${vmid}:`, error.message);
+        } else {
+            console.log(`[Gateway] Successfully deployed Beszel agent to VMID ${vmid}`);
+        }
+    });
+}
+
 async function registerService(vmid, hostname, ip, exposeArray, force = false, envType = 'lxc') {
+    let isFirstRoute = true;
+    for (const data of Object.values(routes)) {
+        if (data.vmid === vmid) {
+            isFirstRoute = false;
+            break;
+        }
+    }
+
+    if ((isFirstRoute || force) && vmid > 0) {
+        // Auto-registration disabled per user request
+        // deployBeszelAgent(vmid, hostname, ip, envType);
+    }
+
     if (force) {
         // Clear old routes for this VMID from state
         for (const [existingHostname, data] of Object.entries(routes)) {
@@ -547,7 +619,7 @@ setInterval(async () => {
             const latencyMs = currentStatus === 'online' ? Date.now() - startPing : -1;
             
             // Self-Healing IP Tracking
-            if (currentStatus === 'offline' && data.vmid && data.vmid !== 999) {
+            if (currentStatus === 'offline' && data.vmid) {
                 console.warn(`[Self-Healing] ${hostname} is offline. Checking Proxmox for IP drift...`);
                 try {
                     const details = await discoverLxcDetails(data.vmid);
@@ -639,8 +711,9 @@ const swaggerOptions = {
 adminApp.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerJsdoc(swaggerOptions)));
 
 // --- PROXMOX API CLIENT ---
+const pveBaseUrl = PVE_URL ? PVE_URL.replace(/\/api2\/json\/?$/, '') : '';
 const pveAxios = axios.create({
-    baseURL: PVE_URL,
+    baseURL: pveBaseUrl,
     httpsAgent: new https.Agent({ rejectUnauthorized: false })
 });
 
@@ -655,6 +728,7 @@ async function getPveTicket() {
     }
 
     try {
+        console.log(`[PVE] Attempting to get ticket at URL: ${pveBaseUrl}/api2/json/access/ticket with User: ${PVE_USER}`);
         const response = await pveAxios.post('/api2/json/access/ticket', new URLSearchParams({
             username: PVE_USER,
             password: PVE_PASSWORD
@@ -671,6 +745,9 @@ async function getPveTicket() {
         setTimeout(() => { pveAuthCookie = null; pveCsrfToken = null; }, 1000 * 60 * 60);
     } catch (error) {
         console.error(`[PVE] Failed to get Proxmox ticket:`, error.message);
+        if (error.response) {
+            console.error(`[PVE] Response:`, error.response.status, error.response.data);
+        }
         throw error;
     }
 }
@@ -771,7 +848,8 @@ adminApp.post('/login', async (req, res) => {
     try {
         const tbResponse = await axios.post(`${TB_SERVER}/api/auth/login`, { username, password });
         if (tbResponse.status === 200 && tbResponse.data.token) {
-            const localToken = crypto.randomUUID();
+            const signature = crypto.createHmac('sha256', GATEWAY_API_KEY).update(username).digest('hex');
+            const localToken = `${username}:${signature}`;
             sessions[localToken] = {
                 user: username,
                 expires: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
@@ -959,7 +1037,129 @@ adminApp.get('/discover/:vmid', async (req, res) => {
             return res.json({ ...details, envType: 'lxc' });
         }
     } catch (e) {
+        console.error("[Gateway] Discovery failed for VMID", vmid, e.message);
+        if (e.response) {
+            console.error("[Gateway] Proxmox Response:", e.response.status, e.response.data);
+        }
         res.status(404).json({ error: "Could not auto-discover VM or LXC details." });
+    }
+});
+
+/**
+ * @swagger
+ * /api/beszel/register:
+ *   post:
+ *     summary: Manually deploy Beszel agent to a VM/LXC
+ *     tags: [Monitoring]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               vmid: { type: integer }
+ *     responses:
+ *       200: { description: "Success" }
+ *       500: { description: "Error" }
+ */
+adminApp.post('/api/beszel/register', async (req, res) => {
+    try {
+        const { vmid } = req.body;
+        if (!vmid) return res.status(400).json({ error: "Missing vmid" });
+        
+        let details;
+        let envType;
+        try {
+            details = await discoverVmDetails(vmid);
+            envType = 'qemu';
+        } catch(qemuErr) {
+            details = await discoverLxcDetails(vmid);
+            envType = 'lxc';
+        }
+
+        if (!details || !details.hostname || !details.ip) {
+            return res.status(404).json({ error: "Could not discover VM details" });
+        }
+        
+        deployBeszelAgent(vmid, details.hostname, details.ip, envType);
+        
+        res.json({ success: true, message: `Deployment triggered for VMID ${vmid}` });
+    } catch (e) {
+        console.error("[Gateway] Manual Beszel deploy error:", e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+/**
+ * @swagger
+ * /api/beszel/script:
+ *   get:
+ *     summary: Generate Beszel Agent deployment script
+ *     tags: [Monitoring]
+ *     responses:
+ *       200: { description: "Returns a bash script" }
+ */
+adminApp.get('/api/beszel/script', async (req, res) => {
+    try {
+        let pubKey = "";
+        const pubKeyPath = '/beszel_data/id_ed25519.pub';
+        const privKeyPath = '/beszel_data/id_ed25519';
+        if (!fs.existsSync(pubKeyPath) && fs.existsSync(privKeyPath)) {
+            try {
+                require('child_process').execSync(`ssh-keygen -y -f ${privKeyPath} > ${pubKeyPath}`);
+            } catch(e) {
+                console.error("[Gateway] Failed to generate Beszel pub key:", e.message);
+            }
+        }
+        
+        if (fs.existsSync(pubKeyPath)) {
+            pubKey = fs.readFileSync(pubKeyPath, 'utf8').trim();
+        }
+
+        await getPveTicket();
+        const headers = { 'Cookie': pveAuthCookie, 'CSRFPreventionToken': pveCsrfToken };
+
+        const lxcRes = await pveAxios.get(`/api2/json/nodes/${PVE_NODE}/lxc`, { headers });
+        const qemuRes = await pveAxios.get(`/api2/json/nodes/${PVE_NODE}/qemu`, { headers });
+
+        let script = "#!/bin/bash\n\n";
+        script += "# ==========================================\n";
+        script += "# Beszel Agent Deployment Script\n";
+        script += "# Run this on your Proxmox Node Shell\n";
+        script += "# ==========================================\n\n";
+        
+        if (pubKey) {
+            script += `KEY="${pubKey}"\n\n`;
+        } else {
+            script += `KEY="YOUR_PUBLIC_KEY_HERE" # Beszel public key not found automatically. Replace this.\n\n`;
+        }
+
+        script += "echo \"Deploying Beszel Agent to all running LXC and VM containers...\"\n\n";
+
+        const lxcs = lxcRes.data.data || [];
+        for (const lxc of lxcs) {
+            if (lxc.status === 'running') {
+                script += `# LXC ${lxc.vmid} (${lxc.name})\n`;
+                script += `echo "Installing on LXC ${lxc.vmid}..."\n`;
+                script += `pct exec ${lxc.vmid} -- bash -c "curl -sL https://raw.githubusercontent.com/henrygd/beszel/main/supplemental/scripts/install-agent.sh | bash -s -- -p 45876 -k \\"$KEY\\""\n\n`;
+            }
+        }
+
+        const vms = qemuRes.data.data || [];
+        for (const vm of vms) {
+            if (vm.status === 'running') {
+                script += `# VM ${vm.vmid} (${vm.name})\n`;
+                script += `echo "Installing on VM ${vm.vmid}..."\n`;
+                script += `qm guest exec ${vm.vmid} -- bash -c "curl -sL https://raw.githubusercontent.com/henrygd/beszel/main/supplemental/scripts/install-agent.sh | bash -s -- -p 45876 -k \\"$KEY\\""\n\n`;
+            }
+        }
+        
+        script += "echo 'Beszel deployment script completed!'\n";
+        res.type('text/plain').send(script);
+    } catch (e) {
+        console.error("[Gateway] Failed to generate Beszel script:", e.message);
+        res.status(500).json({ error: "Failed to generate script." });
     }
 });
 
@@ -1007,6 +1207,30 @@ adminApp.put('/api/routes/:hostname/mode', (req, res) => {
  *         description: A JSON object grouping services by VMID
  */
 let tunnelConnectionsCache = { data: [], lastFetch: 0 };
+let beszelStatusCache = {};
+
+function pollBeszelStatus() {
+    try {
+        const hostIP = new URL(PVE_URL).hostname;
+        const remotePollerCmd = `lxc-attach -n 999 -- sqlite3 -json /opt/gateway/beszel_data/data.db 'SELECT host, status FROM systems;'`;
+        const sshCmd = `sshpass -p '${PVE_PASSWORD}' ssh -o StrictHostKeyChecking=no root@${hostIP} "ssh -o StrictHostKeyChecking=no ${PVE_NODE} \\"${remotePollerCmd}\\""`;
+        exec(sshCmd, (error, stdout) => {
+            if (!error && stdout) {
+                try {
+                    const data = JSON.parse(stdout);
+                    const newCache = {};
+                    for (const item of data) {
+                        newCache[item.host] = item.status;
+                    }
+                    beszelStatusCache = newCache;
+                } catch(e) {}
+            }
+        });
+    } catch(e) {}
+}
+
+setInterval(pollBeszelStatus, 15000);
+pollBeszelStatus();
 
 adminApp.get('/services', async (req, res) => {
     const { vmid, port, mode } = req.query;
@@ -1047,7 +1271,8 @@ adminApp.get('/services', async (req, res) => {
         tunnel_id: ACTIVE_TUNNEL_ID,
         tunnel_connections: tunnelConnectionsCache.data,
         last_updated: new Date().toISOString(), 
-        services: groupedServices 
+        services: groupedServices,
+        beszel_status: beszelStatusCache
     });
 });
 
@@ -1166,14 +1391,127 @@ proxyApp.post('/__auth__', express.urlencoded({ extended: true }), express.json(
     const { username, password } = req.body;
     try {
         const response = await axios.post(`${TB_SERVER}/api/auth/login`, { username, password });
-        res.json({ token: response.data.token });
+        if (response.status === 200) {
+            const signature = crypto.createHmac('sha256', GATEWAY_API_KEY).update(username).digest('hex');
+            const localToken = `${username}:${signature}`;
+            res.json({ token: localToken });
+        }
     } catch (error) {
         res.status(401).json({ error: 'Invalid credentials' });
     }
 });
 
-proxyApp.use((req, res, next) => {
-    const host = req.hostname;
+proxyApp.use(async (req, res, next) => {
+    const host = req.hostname || '';
+    if (host.startsWith('beszel-') && req.path === '/__sso__') {
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+        res.set('Pragma', 'no-cache');
+        res.set('Expires', '0');
+
+        let token = req.query.token;
+        const cookieHeader = req.headers.cookie;
+        let cookieUser;
+        
+        if (!token && cookieHeader) {
+            const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
+                const [key, val] = cookie.split('=').map(c => c.trim());
+                acc[key] = decodeURIComponent(val);
+                return acc;
+            }, {});
+            token = cookies['gateway_token'];
+            cookieUser = cookies['gateway_user'];
+        }
+        
+        console.log(`[SSO DEBUG] host=${host}, token=${token ? 'exists' : 'missing'} (from ${req.query.token ? 'url' : 'cookie'})`);
+        
+        if (token) {
+            let email;
+            if (sessions[token]) {
+                email = sessions[token].user;
+            } else if (token.includes(':')) {
+                const [u, sig] = token.split(':');
+                const expectedSig = crypto.createHmac('sha256', GATEWAY_API_KEY).update(u).digest('hex');
+                if (sig === expectedSig) {
+                    email = u;
+                    sessions[token] = { user: email, expires: Date.now() + 24 * 60 * 60 * 1000 };
+                }
+            }
+            
+            if (email) {
+                let redirectUrl = req.query.redirect || '/';
+                
+                const sysMatch = redirectUrl.match(/^\/system\/(.+)$/);
+                if (sysMatch) {
+                    const sysName = sysMatch[1];
+                    try {
+                        const apiRes = await axios.get(`http://localhost:8090/api/collections/systems/records?filter=(name='${sysName}')`, {
+                            headers: { 'X-Webauth-User': email },
+                            timeout: 2000
+                        });
+                        if (apiRes.data && apiRes.data.items && apiRes.data.items.length > 0) {
+                            redirectUrl = `/system/${apiRes.data.items[0].id}`;
+                        }
+                    } catch(e) {
+                        console.error("[SSO DEBUG] Failed to lookup system ID via API:", e.message);
+                    }
+                }
+
+                let pbAuth = null;
+                try {
+                    const authRes = await axios.post(`http://localhost:8090/api/collections/users/auth-refresh`, null, {
+                        headers: { 'X-Webauth-User': email },
+                        timeout: 2000
+                    });
+                    if (authRes.data && authRes.data.token) {
+                        pbAuth = {
+                            token: authRes.data.token,
+                            model: authRes.data.record
+                        };
+                    }
+                } catch(e) {
+                    console.error("[SSO DEBUG] Failed to refresh genuine auth token:", e.message);
+                }
+
+                // Fallback to fake token only if auth-refresh completely fails
+                if (!pbAuth) {
+                    const fakePayload = Buffer.from(JSON.stringify({
+                        id: "pq9jahe66xfrabx", // Hardcoded fallback just in case
+                        type: "authRecord",
+                        collectionId: "_pb_users_auth_",
+                        exp: Math.floor(Date.now() / 1000) + (86400 * 30)
+                    })).toString('base64').replace(/=/g, '');
+                    const fakeToken = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${fakePayload}.fakesig`;
+                    
+                    pbAuth = {
+                        token: fakeToken,
+                        model: {
+                            id: "pq9jahe66xfrabx",
+                            email: email,
+                            verified: true,
+                            role: "admin",
+                            collectionId: "_pb_users_auth_",
+                            collectionName: "users"
+                        }
+                    };
+                }
+                
+                const domain = host.split('.').slice(-2).join('.');
+                res.cookie('gateway_token', token, { domain: `.${domain}`, path: '/', maxAge: 86400000, secure: true, sameSite: 'lax' });
+                res.cookie('gateway_user', email, { domain: `.${domain}`, path: '/', maxAge: 86400000, secure: true, sameSite: 'lax' });
+                
+                return res.send(`
+                    <!DOCTYPE html>
+                    <html><head><script>
+                        localStorage.setItem('pocketbase_auth', JSON.stringify(${JSON.stringify(pbAuth)}));
+                        window.location.href = "${redirectUrl}";
+                    </script></head><body>Redirecting to secure dashboard...</body></html>
+                `);
+            }
+        }
+        
+        return res.status(401).send("Unauthorized. Please log in through the PiltiSmart Gateway first.");
+    }
+
     const route = routes[host];
 
     if (!route) {
@@ -1194,8 +1532,31 @@ proxyApp.use((req, res, next) => {
     });
 
     if (route.mode === 'private') {
-        const token = req.query.token || req.headers['authorization'];
-        if (!token) {
+        let token = req.query.token || req.headers['authorization'];
+        let cookieToken;
+        if (req.headers.cookie) {
+             const cookies = req.headers.cookie.split(';').reduce((acc, cookie) => {
+                 const [key, val] = cookie.split('=').map(c => c.trim());
+                 acc[key] = decodeURIComponent(val);
+                 return acc;
+             }, {});
+             cookieToken = cookies['gateway_token'];
+        }
+        token = token || cookieToken;
+        let valid = false;
+        if (token) {
+            if (sessions[token]) {
+                valid = true;
+            } else if (token.includes(':')) {
+                const [u, sig] = token.split(':');
+                const expectedSig = crypto.createHmac('sha256', GATEWAY_API_KEY).update(u).digest('hex');
+                if (sig === expectedSig) {
+                    valid = true;
+                    sessions[token] = { user: u, expires: Date.now() + 24 * 60 * 60 * 1000 };
+                }
+            }
+        }
+        if (!valid) {
             return res.redirect(`/__login__?redirect=https://${host}${req.originalUrl}`);
         }
     }
@@ -1225,7 +1586,69 @@ const dynamicProxy = createProxyMiddleware({
     changeOrigin: true,
     ws: true,
     secure: false, // Bypass self-signed SSL cert errors for Proxmox/HTTPS backends
-    logLevel: 'silent'
+    logLevel: 'silent',
+    onProxyReq: function(proxyReq, req, res) {
+        const host = req.hostname || req.headers.host || '';
+        if (host.startsWith('beszel-')) {
+            const cookieHeader = req.headers.cookie;
+            let token;
+            if (cookieHeader) {
+                const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
+                    const [key, val] = cookie.split('=').map(c => c.trim());
+                    acc[key] = decodeURIComponent(val);
+                    return acc;
+                }, {});
+                token = cookies['gateway_token'];
+            }
+            let email;
+            if (token) {
+                if (sessions[token]) {
+                    email = sessions[token].user;
+                } else if (token.includes(':')) {
+                    const [u, sig] = token.split(':');
+                    const expectedSig = crypto.createHmac('sha256', GATEWAY_API_KEY).update(u).digest('hex');
+                    if (sig === expectedSig) {
+                        email = u;
+                        sessions[token] = { user: u, expires: Date.now() + 24 * 60 * 60 * 1000 };
+                    }
+                }
+            }
+            if (email) {
+                proxyReq.setHeader('X-Webauth-User', email);
+            }
+        }
+    },
+    onProxyReqWs: function(proxyReq, req, socket, options, head) {
+        const host = req.headers.host || '';
+        if (host.startsWith('beszel-')) {
+            const cookieHeader = req.headers.cookie;
+            let token;
+            if (cookieHeader) {
+                const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
+                    const [key, val] = cookie.split('=').map(c => c.trim());
+                    acc[key] = decodeURIComponent(val);
+                    return acc;
+                }, {});
+                token = cookies['gateway_token'];
+            }
+            let email;
+            if (token) {
+                if (sessions[token]) {
+                    email = sessions[token].user;
+                } else if (token.includes(':')) {
+                    const [u, sig] = token.split(':');
+                    const expectedSig = crypto.createHmac('sha256', GATEWAY_API_KEY).update(u).digest('hex');
+                    if (sig === expectedSig) {
+                        email = u;
+                        sessions[token] = { user: u, expires: Date.now() + 24 * 60 * 60 * 1000 };
+                    }
+                }
+            }
+            if (email) {
+                proxyReq.setHeader('X-Webauth-User', email);
+            }
+        }
+    }
 });
 
 proxyApp.use(dynamicProxy);
@@ -1287,6 +1710,29 @@ proxyServer.on('upgrade', (req, socket, head) => {
             await updateTunnelIngress();
         } catch (e) {
             console.error("[Gateway] Failed to auto-register Admin API:", e.message);
+        }
+    }
+
+    const beszelHostname = `beszel-${PVE_NODE || 'proxmox'}-gateway.${BASE_DOMAIN}`;
+    if (!routes[beszelHostname]) {
+        console.log(`[Gateway] Auto-registering Beszel Hub at ${beszelHostname}`);
+        try {
+            await createDnsRecord(beszelHostname);
+            routes[beszelHostname] = {
+                target: `localhost:8090`,
+                mode: 'public',
+                vmid: 999,
+                status: 'online',
+                lastChecked: new Date().toISOString(),
+                createdAt: new Date().toISOString(),
+                latency: -1,
+                metrics: { requests: 0, bytesRx: 0, bytesTx: 0 },
+                activeConnections: 0
+            };
+            saveState();
+            await updateTunnelIngress();
+        } catch (e) {
+            console.error("[Gateway] Failed to auto-register Beszel Hub:", e.message);
         }
     }
 

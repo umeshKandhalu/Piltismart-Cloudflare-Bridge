@@ -1,11 +1,32 @@
 services:
   tb-ssh-bridge:
     image: ghcr.io/umeshkandhalu/piltismart-cloudflare-bridge:latest
+    build: .
     container_name: piltismart-gateway
     network_mode: host
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+      - ./beszel_data:/beszel_data
     environment:
       - TB_SERVER=${TB_SERVER:-https://tb.piltismart.com}
       - CF_API_TOKEN=${CF_API_TOKEN}
       - CF_ACCOUNT_ID=${CF_ACCOUNT_ID}
       - CF_ZONE_ID=${CF_ZONE_ID}
-      - BASE
+      - BASE_DOMAIN=${BASE_DOMAIN}
+      - PVE_URL=${PVE_URL}
+      - PVE_USER=${PVE_USER}
+      - PVE_PASSWORD=${PVE_PASSWORD}
+      - PVE_NODE=${PVE_NODE}
+      - GATEWAY_API_KEY=${GATEWAY_API_KEY}
+      - DATA_DIR=/data
+
+  beszel:
+    image: 'henrygd/beszel:latest'
+    container_name: 'beszel'
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - TRUSTED_AUTH_HEADER=X-Webauth-User
+    volumes:
+      - ./beszel_data:/beszel_data

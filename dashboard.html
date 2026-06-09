@@ -660,6 +660,24 @@
         </div>
     </div>
     
+    <div id="beszel-overlay" class="overlay hidden">
+        <div class="modal" style="max-width: 800px;">
+            <button class="modal-close" onclick="closeBeszel()">&times;</button>
+            <h2>Beszel Agent Deployment</h2>
+            <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.5rem;">
+                Copy and run the script below on your <strong>Proxmox Node Shell</strong> to automatically deploy the Beszel Agent to all running LXC containers and VMs.
+            </p>
+            <div id="beszel-loading" style="text-align: center; padding: 2rem;">
+                <div class="loader" style="width: 30px; height: 30px; border-width: 3px;"></div>
+                <div style="margin-top: 10px; color: var(--text-muted);">Generating deployment script from Proxmox API...</div>
+            </div>
+            <div id="beszel-content" style="display: none;">
+                <textarea id="beszel-script-area" readonly style="width: 100%; height: 300px; background: rgba(0,0,0,0.3); color: #10b981; border: 1px solid var(--card-border); padding: 15px; font-family: monospace; font-size: 0.85rem; border-radius: 8px; resize: none; margin-bottom: 1rem;"></textarea>
+                <button class="modal-btn" onclick="copyBeszelScript()">Copy Script to Clipboard</button>
+            </div>
+        </div>
+    </div>
+    
     <div id="confirm-overlay" class="overlay hidden">
         <div class="modal" style="max-width: 600px; text-align: center;">
             <h2 id="confirm-title" style="color: var(--text-main); margin-bottom: 0.5rem;">Confirm Action</h2>
@@ -668,6 +686,14 @@
                 <button class="modal-btn" style="background: rgba(255,255,255,0.1); width: auto; padding: 10px 20px;" onclick="closeConfirm()">Cancel</button>
                 <button class="modal-btn btn-danger" id="confirm-yes-btn" style="width: auto; padding: 10px 20px;">Confirm</button>
             </div>
+        </div>
+    </div>
+    
+    <div id="alert-overlay" class="overlay hidden">
+        <div class="modal" style="max-width: 500px; text-align: center;">
+            <h2 id="alert-title" style="color: var(--text-main); margin-bottom: 0.5rem;">Alert</h2>
+            <div id="alert-msg" style="margin-bottom: 1.5rem; color: var(--text-muted); font-size: 0.95rem;"></div>
+            <button class="modal-btn" style="width: auto; padding: 10px 30px;" onclick="closeAlert()">OK</button>
         </div>
     </div>
     
@@ -780,6 +806,14 @@
                     </div>
                     
                     <div style="display: flex; gap: 10px;">
+                        <button class="btn-primary" style="background: rgba(255,255,255,0.1);" onclick="openMonitoring()">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                            Beszel Hub
+                        </button>
+                        <button class="btn-primary" style="background: rgba(255,255,255,0.1);" onclick="openBeszel()">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                            Deploy Agents
+                        </button>
                         <button class="btn-primary" style="background: rgba(255,255,255,0.1);" onclick="openAudit()">
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                             Audit Logs
@@ -845,6 +879,52 @@
         let sortCol = 'createdAt';
         let sortAsc = false;
 
+        function openBeszel() {
+            document.getElementById('beszel-overlay').classList.remove('hidden');
+            document.getElementById('beszel-loading').style.display = 'block';
+            document.getElementById('beszel-content').style.display = 'none';
+            
+            fetch('/api/beszel/script', {
+                headers: { 'x-api-key': apiKey }
+            }).then(r => r.text()).then(script => {
+                document.getElementById('beszel-script-area').value = script;
+                document.getElementById('beszel-loading').style.display = 'none';
+                document.getElementById('beszel-content').style.display = 'block';
+            }).catch(e => {
+                document.getElementById('beszel-loading').innerHTML = `<span style="color: var(--danger)">Failed to generate script. Ensure backend is running.</span>`;
+            });
+        }
+        
+        function closeBeszel() {
+            document.getElementById('beszel-overlay').classList.add('hidden');
+        }
+        
+        function copyBeszelScript() {
+            const copyText = document.getElementById("beszel-script-area");
+            copyText.select();
+            copyText.setSelectionRange(0, 99999);
+            navigator.clipboard.writeText(copyText.value);
+            
+            const btn = event.target;
+            const originalText = btn.innerText;
+            btn.innerText = "Copied!";
+            btn.style.background = "var(--success)";
+            setTimeout(() => {
+                btn.innerText = originalText;
+                btn.style.background = "var(--accent)";
+            }, 2000);
+        }
+        
+        function openMonitoring() {
+            const parts = window.location.hostname.split('.');
+            const firstPart = parts[0];
+            const nodeMatch = firstPart.match(/admin-([^-]+)/);
+            const node = nodeMatch ? nodeMatch[1] : 'proxmox';
+            parts[0] = `beszel-${node}-gateway`;
+            const newHost = parts.join('.');
+            window.open(`https://${newHost}`, '_blank');
+        }
+
         function formatBytes(bytes, decimals = 2) {
             if (!+bytes) return '0.00 <span class="metric-unit">B</span>';
             const k = 1024;
@@ -886,6 +966,11 @@
                     localStorage.setItem('gateway_user', data.user);
                     apiKey = data.token;
                     gatewayUser = data.user;
+                    
+                    // Set domain-wide cookie for SSO
+                    const domain = window.location.hostname.split('.').slice(-2).join('.');
+                    document.cookie = `gateway_token=${data.token}; domain=${domain}; path=/; max-age=86400; secure; samesite=lax`;
+                    document.cookie = `gateway_user=${encodeURIComponent(data.user)}; domain=${domain}; path=/; max-age=86400; secure; samesite=lax`;
                     
                     document.getElementById('auth-overlay').classList.add('hidden');
                     startPolling();
@@ -1178,6 +1263,16 @@
             document.getElementById('confirm-overlay').classList.add('hidden');
         }
 
+        function closeAlert() {
+            document.getElementById('alert-overlay').classList.add('hidden');
+        }
+
+        function customAlert(title, msg) {
+            document.getElementById('alert-title').innerText = title;
+            document.getElementById('alert-msg').innerHTML = msg;
+            document.getElementById('alert-overlay').classList.remove('hidden');
+        }
+
         function customConfirm(title, msg) {
             return new Promise((resolve) => {
                 document.getElementById('confirm-title').innerText = title;
@@ -1399,6 +1494,7 @@
                     });
                 }
             }
+            window.beszelStatusCache = data.beszel_status || {};
             cachedServices = flattened;
             renderDashboard();
         }
@@ -1477,6 +1573,64 @@
                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                                     Add Route
                                 </button>
+                                ${(() => {
+                                    let beszelStatus = window.beszelStatusCache ? window.beszelStatusCache[ip] : undefined;
+                                    if (beszelStatus === 'up') {
+                                        let beszelUrl = '#';
+                                        let sysName = vmid === 999 ? 'piltismart-gateway' : '';
+                                        
+                                        if (cachedServices && cachedServices.length > 0) {
+                                            let targetNode = 'gold';
+                                            if (window.lastData && window.lastData.proxmox && window.lastData.proxmox.nodes) {
+                                                for (const n of window.lastData.proxmox.nodes) {
+                                                    if (n.vms.some(v => v.vmid == vmid) || n.lxcs.some(v => v.vmid == vmid)) {
+                                                        targetNode = n.node.toLowerCase();
+                                                        break;
+                                                    }
+                                                }
+                                            }
+                                            const hubRoute = cachedServices.find(s => s && s.hostname && s.hostname.startsWith(`beszel-${targetNode}-gateway`));
+                                            if (hubRoute) beszelUrl = hubRoute.url;
+                                            
+                                            if (!sysName) {
+                                                const autoRoute = svcs.find(s => s.hostname.includes(`-${vmid}-`));
+                                                if (autoRoute) {
+                                                    const sub = autoRoute.hostname.split('.')[0];
+                                                    const parts = sub.split('-');
+                                                    const idx = parts.indexOf(vmid.toString());
+                                                    if (idx !== -1 && parts.length > idx + 1) {
+                                                        sysName = parts.slice(idx + 1).join('-');
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        
+                                        if (beszelUrl !== '#' && sysName) {
+                                            beszelUrl = `${beszelUrl}/__sso__?token=${encodeURIComponent(apiKey)}&redirect=/system/${sysName}`;
+                                        }
+                                        
+                                        return `
+                                            <a href="${beszelUrl}" target="_blank" class="btn-primary btn-sm" style="background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.5); text-decoration: none;" title="Open Beszel System Page">
+                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                                Beszel: Active
+                                            </a>
+                                        `;
+                                    } else if (beszelStatus === 'pending') {
+                                        return `
+                                            <button class="btn-primary btn-sm" style="background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3);" onclick="deployBeszelAgent(${vmid})" id="deploy-btn-${vmid}">
+                                                <div class="loader" style="width: 12px; height: 12px; border-width: 2px;"></div>
+                                                Beszel: Pending
+                                            </button>
+                                        `;
+                                    } else {
+                                        return `
+                                            <button class="btn-primary btn-sm" style="background: rgba(16, 185, 129, 0.15); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.3);" onclick="deployBeszelAgent(${vmid})" id="deploy-btn-${vmid}">
+                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                                                Beszel Agent
+                                            </button>
+                                        `;
+                                    }
+                                })()}
                                 <button class="btn-primary btn-sm btn-danger" onclick="deleteContainer(${vmid})" title="Wipe all routes for this container">
                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                     Delete All
@@ -1574,6 +1728,46 @@
             }
             
             content.innerHTML = html;
+        }
+
+        async function deployBeszelAgent(vmid) {
+            const confirmed = await customConfirm('Deploy Beszel Agent', `
+                <div style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.5rem;">
+                    Are you sure you want to manually deploy the Beszel Agent to <b>VMID ${vmid}</b>?
+                </div>
+            `);
+            if (!confirmed) return;
+
+            const btn = document.getElementById(`deploy-btn-${vmid}`);
+            if (btn) {
+                btn.innerHTML = '<div class="loader" style="width: 14px; height: 14px; border-width: 2px;"></div> Deploying...';
+                btn.disabled = true;
+            }
+
+            try {
+                const res = await fetch('/api/beszel/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+                    body: JSON.stringify({ vmid: parseInt(vmid) })
+                });
+                
+                if (res.ok) {
+                    customAlert('Success', 'Deployment triggered successfully! The system should appear in your Beszel Dashboard momentarily.');
+                } else {
+                    const data = await res.json();
+                    customAlert('Error', data.error || 'Failed to trigger deployment.');
+                }
+            } catch (e) {
+                customAlert('Error', 'Connection error.');
+            }
+            
+            if (btn) {
+                btn.innerHTML = `
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+                    Beszel Agent
+                `;
+                btn.disabled = false;
+            }
         }
 
         function startPolling() {
