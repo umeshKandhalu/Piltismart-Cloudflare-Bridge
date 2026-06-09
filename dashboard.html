@@ -1804,6 +1804,8 @@
                 `;
                 btn.disabled = false;
             }
+        function closeDeployProgress() {
+            document.getElementById('deploy-progress-overlay').classList.add('hidden');
         }
 
         function startPolling() {

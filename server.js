@@ -474,13 +474,13 @@ function deployBeszelAgent(vmid, hostname, ip, envType, onData, onExit) {
         return;
     }
 
-    const installCmd = `rm -f /etc/systemd/system/beszel-agent.service && curl -sL https://raw.githubusercontent.com/henrygd/beszel/main/supplemental/scripts/install-agent.sh | bash -s -- -p 45876 -k \\"${pubKey}\\" --auto-update true`;
+    const installCmd = `rm -f /etc/systemd/system/beszel-agent.service && curl -sL https://raw.githubusercontent.com/henrygd/beszel/main/supplemental/scripts/install-agent.sh | bash -s -- -p 45876 -k "${pubKey}" --auto-update true`;
     
     let remoteScript = "";
     if (envType === 'qemu') {
-        remoteScript = `qm guest exec ${vmid} -- bash -c "${installCmd}"`;
+        remoteScript = `qm guest exec ${vmid} -- bash -c '${installCmd}'`;
     } else {
-        remoteScript = `pct exec ${vmid} -- bash -c "${installCmd}"`;
+        remoteScript = `pct exec ${vmid} -- bash -c '${installCmd}'`;
     }
 
     const sqlQuery = `DELETE FROM systems WHERE name = '${hostname}' OR host = '${ip}'; INSERT INTO systems (name, host, port, status, info, users, created, updated) VALUES ('${hostname}', '${ip}', '45876', 'pending', '{}', (SELECT json_group_array(id) FROM users), datetime('now'), datetime('now'));`;
