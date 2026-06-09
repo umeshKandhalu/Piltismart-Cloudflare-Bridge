@@ -1570,6 +1570,67 @@
                 const isQemu = svcs.length > 0 && svcs[0].envType === 'qemu';
                 const title = isQemu ? `Virtual Machine: <b>VMID ${vmid}</b>` : `LXC Container: <b>VMID ${vmid}</b>`;
                 
+                let beszelStatus = window.beszelStatusCache ? window.beszelStatusCache[ip] : undefined;
+                let beszelUrl = '#';
+                let sysName = vmid == 999 ? 'piltismart-gateway' : '';
+                
+                if (beszelStatus === 'up' || beszelStatus === 'active') {
+                    beszelStatus = 'active';
+                    if (cachedServices && cachedServices.length > 0) {
+                        let targetNode = 'gold';
+                        if (window.lastData && window.lastData.proxmox && window.lastData.proxmox.nodes) {
+                            for (const n of window.lastData.proxmox.nodes) {
+                                if (n.vms.some(v => v.vmid == vmid) || n.lxcs.some(v => v.vmid == vmid)) {
+                                    targetNode = n.node.toLowerCase();
+                                    break;
+                                }
+                            }
+                        }
+                        const hubRoute = cachedServices.find(s => s && s.hostname && s.hostname.startsWith(`beszel-${targetNode}-gateway`));
+                        if (hubRoute) beszelUrl = hubRoute.url;
+                        
+                        if (!sysName) {
+                            const autoRoute = svcs.find(s => s.hostname.includes(`-${vmid}-`));
+                            if (autoRoute) {
+                                const sub = autoRoute.hostname.split('.')[0];
+                                const parts = sub.split('-');
+                                const idx = parts.indexOf(vmid.toString());
+                                if (idx !== -1 && parts.length > idx + 1) {
+                                    sysName = parts.slice(idx + 1).join('-');
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                let beszelBtnHtml = '';
+                if (beszelStatus === 'active') {
+                    let btnUrl = beszelUrl;
+                    if (btnUrl !== '#' && sysName) {
+                        btnUrl = `${btnUrl}/__sso__?token=${encodeURIComponent(apiKey)}&redirect=/system/${sysName}`;
+                    }
+                    beszelBtnHtml = `
+                        <a href="${btnUrl}" target="_blank" class="btn-primary btn-sm" style="background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.5); text-decoration: none;" title="Open Beszel System Page">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                            Beszel: Active
+                        </a>
+                    `;
+                } else if (beszelStatus === 'pending') {
+                    beszelBtnHtml = `
+                        <button class="btn-primary btn-sm" style="background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3);" onclick="deployBeszelAgent(${vmid})" id="deploy-btn-${vmid}">
+                            <div class="loader" style="width: 12px; height: 12px; border-width: 2px;"></div>
+                            Beszel: Pending
+                        </button>
+                    `;
+                } else {
+                    beszelBtnHtml = `
+                        <button class="btn-primary btn-sm" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3);" onclick="deployBeszelAgent(${vmid})" id="deploy-btn-${vmid}">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            Add to Beszel
+                        </button>
+                    `;
+                }
+                
                 html += `
                     <div class="vmid-group">
                         <div class="vmid-header">
@@ -1582,64 +1643,7 @@
                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                                     Add Route
                                 </button>
-                                ${(() => {
-                                    let beszelStatus = window.beszelStatusCache ? window.beszelStatusCache[ip] : undefined;
-                                    if (beszelStatus === 'up') {
-                                        let beszelUrl = '#';
-                                        let sysName = vmid === 999 ? 'piltismart-gateway' : '';
-                                        
-                                        if (cachedServices && cachedServices.length > 0) {
-                                            let targetNode = 'gold';
-                                            if (window.lastData && window.lastData.proxmox && window.lastData.proxmox.nodes) {
-                                                for (const n of window.lastData.proxmox.nodes) {
-                                                    if (n.vms.some(v => v.vmid == vmid) || n.lxcs.some(v => v.vmid == vmid)) {
-                                                        targetNode = n.node.toLowerCase();
-                                                        break;
-                                                    }
-                                                }
-                                            }
-                                            const hubRoute = cachedServices.find(s => s && s.hostname && s.hostname.startsWith(`beszel-${targetNode}-gateway`));
-                                            if (hubRoute) beszelUrl = hubRoute.url;
-                                            
-                                            if (!sysName) {
-                                                const autoRoute = svcs.find(s => s.hostname.includes(`-${vmid}-`));
-                                                if (autoRoute) {
-                                                    const sub = autoRoute.hostname.split('.')[0];
-                                                    const parts = sub.split('-');
-                                                    const idx = parts.indexOf(vmid.toString());
-                                                    if (idx !== -1 && parts.length > idx + 1) {
-                                                        sysName = parts.slice(idx + 1).join('-');
-                                                    }
-                                                }
-                                            }
-                                        }
-                                        
-                                        if (beszelUrl !== '#' && sysName) {
-                                            beszelUrl = `${beszelUrl}/__sso__?token=${encodeURIComponent(apiKey)}&redirect=/system/${sysName}`;
-                                        }
-                                        
-                                        return `
-                                            <a href="${beszelUrl}" target="_blank" class="btn-primary btn-sm" style="background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.5); text-decoration: none;" title="Open Beszel System Page">
-                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
-                                                Beszel: Active
-                                            </a>
-                                        `;
-                                    } else if (beszelStatus === 'pending') {
-                                        return `
-                                            <button class="btn-primary btn-sm" style="background: rgba(245, 158, 11, 0.15); color: var(--warning); border: 1px solid rgba(245, 158, 11, 0.3);" onclick="deployBeszelAgent(${vmid})" id="deploy-btn-${vmid}">
-                                                <div class="loader" style="width: 12px; height: 12px; border-width: 2px;"></div>
-                                                Beszel: Pending
-                                            </button>
-                                        `;
-                                    } else {
-                                        return `
-                                            <button class="btn-primary btn-sm" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3);" onclick="deployBeszelAgent(${vmid})" id="deploy-btn-${vmid}">
-                                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
-                                                Add to Beszel
-                                            </button>
-                                        `;
-                                    }
-                                })()}
+                                ${beszelBtnHtml}
                                 <button class="btn-primary btn-sm btn-danger" onclick="deleteContainer(${vmid})" title="Wipe all routes for this container">
                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                     Delete All
