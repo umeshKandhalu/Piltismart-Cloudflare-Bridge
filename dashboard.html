@@ -26,6 +26,8 @@
             --warning: #f59e0b;
         }
 
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
         body {
             font-family: 'Outfit', sans-serif;
             background-color: var(--bg-color);
@@ -801,6 +803,9 @@
             </h1>
             <div style="display: flex; gap: 10px; align-items: center; color: var(--text-muted); font-size: 0.9rem;">
                 <span id="user-greeting"></span>
+                <button onclick="manualRefresh()" class="btn-primary btn-sm" style="display: none; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); padding: 4px 8px; height: 28px; width: 28px; justify-content: center;" id="refresh-btn" title="Refresh Dashboard">
+                    <svg id="refresh-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                </button>
                 <button onclick="logout()" class="btn-primary btn-sm btn-danger" style="display: none;" id="logout-btn">Logout</button>
             </div>
         </header>
@@ -1457,6 +1462,20 @@
                 console.error("Failed to fetch metrics", e);
             }
         }
+        
+        async function manualRefresh() {
+            const btn = document.getElementById('refresh-btn');
+            const icon = document.getElementById('refresh-icon');
+            if (btn.disabled) return;
+            
+            btn.disabled = true;
+            icon.style.animation = 'spin 1s linear infinite';
+            
+            await fetchMetrics();
+            
+            icon.style.animation = 'none';
+            btn.disabled = false;
+        }
 
         function processData(data) {
             let connectionsHtml = '';
@@ -1599,6 +1618,28 @@
                                     sysName = parts.slice(idx + 1).join('-');
                                 }
                             }
+                        }
+                    }
+                    
+                    const hasBeszelRoute = svcs.some(s => s.target && s.target.endsWith(':45876'));
+                    if (!hasBeszelRoute) {
+                        if (!window.autoRegisteredRoutes) window.autoRegisteredRoutes = new Set();
+                        if (!window.autoRegisteredRoutes.has(vmid)) {
+                            window.autoRegisteredRoutes.add(vmid);
+                            const baseHost = sysName || `vmid-${vmid}`;
+                            console.log(`Auto-registering missing route for Beszel on VM ${vmid}...`);
+                            fetch(API_URL_REGISTER, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+                                body: JSON.stringify({
+                                    vmid: vmid,
+                                    hostname: baseHost,
+                                    ip: ip,
+                                    expose: [{ port: 45876, mode: 'tcp' }],
+                                    envType: isQemu ? 'qemu' : 'lxc',
+                                    force: false
+                                })
+                            }).then(() => fetchMetrics()).catch(e => console.error(e));
                         }
                     }
                 }
@@ -1857,6 +1898,7 @@
                 document.getElementById('user-greeting').innerText = `Logged in via Static Key`;
             }
             document.getElementById('logout-btn').style.display = 'inline-block';
+            document.getElementById('refresh-btn').style.display = 'flex';
             
             fetchMetrics();
             pollInterval = setInterval(fetchMetrics, 5000);
