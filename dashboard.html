@@ -185,13 +185,6 @@
             align-items: center;
             gap: 15px;
         }
-        
-        .vmid-header::after {
-            content: "";
-            flex: 1;
-            height: 1px;
-            background: var(--card-border);
-        }
 
         .vmid-header-actions {
             display: flex;
@@ -212,7 +205,8 @@
             width: 100%;
             border-collapse: collapse;
             text-align: left;
-            min-width: 1000px;
+            table-layout: fixed;
+            min-width: 1400px;
         }
 
         .audit-table {
@@ -683,9 +677,47 @@
     <div id="deploy-progress-overlay" class="overlay hidden">
         <div class="modal" style="max-width: 800px;">
             <button class="modal-close" onclick="closeDeployProgress()" id="deploy-close-btn" style="display: none;">&times;</button>
-            <h2 id="deploy-progress-title" style="margin-bottom: 1rem;">Deploying Beszel Agent...</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h2 id="deploy-progress-title" style="margin: 0;">Deploying...</h2>
+                <span id="deploy-progress-text" style="font-size: 1.2rem; font-weight: bold; color: var(--accent); display: none;">0%</span>
+            </div>
+            <div id="deploy-progress-bar-container" style="width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; overflow: hidden; margin-bottom: 15px; display: none;">
+                <div id="deploy-progress-bar-fill" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.3s ease;"></div>
+            </div>
             <div id="deploy-progress-content" style="background: rgba(0,0,0,0.5); color: #10b981; border: 1px solid var(--card-border); padding: 15px; font-family: monospace; font-size: 0.85rem; border-radius: 8px; height: 350px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; margin-bottom: 1rem; text-align: left;"></div>
-            <button class="modal-btn" onclick="closeDeployProgress()" id="deploy-progress-btn" style="display: none;">Close</button>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="modal-btn btn-danger" onclick="abortCurrentTask()" id="deploy-stop-btn" style="display: none;">Stop</button>
+                <button class="modal-btn" onclick="closeDeployProgress()" id="deploy-progress-btn" style="display: none;">Close</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="autodiscover-setup-overlay" class="overlay hidden">
+        <div class="modal" style="max-width: 600px;">
+            <button class="modal-close" onclick="closeAutoDiscoverSetup()">&times;</button>
+            <h2>Auto-Discover Services</h2>
+            <div style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1rem;">
+                Select the ports you wish to scan across all running containers and VMs.
+            </div>
+            
+            <div style="background: rgba(0,0,0,0.2); border-radius: 8px; padding: 15px; border: 1px solid var(--border-color); margin-bottom: 15px;">
+                <div id="autodiscover-ports-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px;">
+                    <!-- Ports populated by JS -->
+                </div>
+                
+                <div style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px; display: flex; gap: 10px; align-items: flex-end;">
+                    <div class="input-group" style="margin: 0; flex: 1;">
+                        <label>Add Custom Port</label>
+                        <input type="number" id="custom-discover-port" placeholder="e.g. 8091" min="1" max="65535" onkeydown="if(event.key==='Enter') addCustomDiscoverPort()">
+                    </div>
+                    <button class="modal-btn" style="width: auto; padding: 10px 20px;" onclick="addCustomDiscoverPort()">Add</button>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button class="modal-btn" style="background: rgba(255,255,255,0.1); width: auto;" onclick="closeAutoDiscoverSetup()">Cancel</button>
+                <button class="modal-btn btn-primary" style="width: auto;" onclick="startAutoDiscover()">Start Discovery</button>
+            </div>
         </div>
     </div>
     
@@ -757,10 +789,11 @@
                         </div>
                     </div>
                     <div class="input-group">
-                        <label>Type</label>
+                        <label>Target Service Type</label>
                         <select id="reg-type" required onchange="updateModeUI()">
-                            <option value="tls">TLS</option>
-                            <option value="tcp">TCP</option>
+                            <option value="http">Web (HTTP)</option>
+                            <option value="https">Web (HTTPS)</option>
+                            <option value="tcp">TCP Server</option>
                         </select>
                     </div>
                     <div class="input-group">
@@ -832,9 +865,17 @@
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
                             Audit Logs
                         </button>
+                        <button class="btn-primary" style="background: rgba(255,255,255,0.1);" onclick="openAutoDiscoverSetup()">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 14a4 4 0 100-8 4 4 0 000 8z"></path></svg>
+                            Auto-Discover Services
+                        </button>
                         <button class="btn-primary" onclick="openRegister()">
                             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>
                             New VM
+                        </button>
+                        <button class="btn-primary btn-danger" onclick="wipeAllServices()">
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            Wipe All Routes
                         </button>
                     </div>
                 </div>
@@ -1151,6 +1192,152 @@
                 console.error("Auto discover failed");
             }
         }
+        let currentAbortController = null;
+
+        function abortCurrentTask() {
+            if (currentAbortController) {
+                currentAbortController.abort();
+                currentAbortController = null;
+            }
+        }
+
+        const DEFAULT_DISCOVER_PORTS = [80, 443, 3000, 5000, 8000, 8080, 8090, 8123, 11434, 22, 3306, 5432];
+
+        function openAutoDiscoverSetup() {
+            const grid = document.getElementById('autodiscover-ports-grid');
+            grid.innerHTML = '';
+            
+            DEFAULT_DISCOVER_PORTS.forEach(port => {
+                grid.innerHTML += `
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem;">
+                        <input type="checkbox" value="${port}" checked class="discover-port-checkbox"> 
+                        ${port}
+                    </label>
+                `;
+            });
+            
+            document.getElementById('custom-discover-port').value = '';
+            document.getElementById('autodiscover-setup-overlay').classList.remove('hidden');
+        }
+
+        function closeAutoDiscoverSetup() {
+            document.getElementById('autodiscover-setup-overlay').classList.add('hidden');
+        }
+
+        function addCustomDiscoverPort() {
+            const input = document.getElementById('custom-discover-port');
+            const port = parseInt(input.value);
+            if (!port || port < 1 || port > 65535) {
+                alert("Please enter a valid port between 1 and 65535");
+                return;
+            }
+            
+            const grid = document.getElementById('autodiscover-ports-grid');
+            grid.innerHTML += `
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; color: var(--accent);">
+                    <input type="checkbox" value="${port}" checked class="discover-port-checkbox"> 
+                    ${port}
+                </label>
+            `;
+            input.value = '';
+        }
+
+        function startAutoDiscover() {
+            const checkboxes = document.querySelectorAll('.discover-port-checkbox:checked');
+            const selectedPorts = Array.from(checkboxes).map(cb => parseInt(cb.value));
+            
+            if (selectedPorts.length === 0) {
+                alert("Please select at least one port to scan.");
+                return;
+            }
+            
+            closeAutoDiscoverSetup();
+            autoDiscoverAll(selectedPorts);
+        }
+
+        async function autoDiscoverAll(portsToScan) {
+            document.getElementById('deploy-progress-title').innerText = "Scanning Network...";
+            const content = document.getElementById('deploy-progress-content');
+            const progressContainer = document.getElementById('deploy-progress-bar-container');
+            const progressFill = document.getElementById('deploy-progress-bar-fill');
+            const progressText = document.getElementById('deploy-progress-text');
+            
+            content.innerHTML = `Initializing cluster-wide port scan on ports: ${portsToScan.join(', ')}...\nThis may take a few seconds.\n\n`;
+            progressFill.style.width = '0%';
+            progressText.innerText = '0%';
+            progressContainer.style.display = 'block';
+            progressText.style.display = 'inline';
+            
+            document.getElementById('deploy-progress-overlay').classList.remove('hidden');
+            document.getElementById('deploy-close-btn').style.display = 'none';
+            document.getElementById('deploy-progress-btn').style.display = 'none';
+            document.getElementById('deploy-stop-btn').style.display = 'block';
+
+            currentAbortController = new AbortController();
+
+            try {
+                const res = await fetch('/services/auto-discover', {
+                    method: 'POST',
+                    headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ports: portsToScan }),
+                    signal: currentAbortController.signal
+                });
+                
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let buffer = "";
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n\n');
+                    buffer = lines.pop(); // keep incomplete chunk
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.substring(6));
+                                if (data.progress) {
+                                    const pct = Math.round((data.progress.current / data.progress.total) * 100);
+                                    progressFill.style.width = pct + '%';
+                                    progressText.innerText = pct + '%';
+                                } else if (data.log) {
+                                    content.innerHTML += data.log + "\n";
+                                    content.scrollTop = content.scrollHeight;
+                                } else if (data.error) {
+                                    document.getElementById('deploy-stop-btn').style.display = 'none';
+                                    content.innerHTML += `\n[ERROR] ${data.error}\n`;
+                                    content.scrollTop = content.scrollHeight;
+                                } else if (data.done) {
+                                    document.getElementById('deploy-stop-btn').style.display = 'none';
+                                    progressFill.style.width = '100%';
+                                    progressText.innerText = '100%';
+                                    content.innerHTML += "\nScan Complete!\n";
+                                    if (data.newlyRegistered && data.newlyRegistered.length > 0) {
+                                        content.innerHTML += `Successfully registered ${data.newlyRegistered.length} new routes:\n`;
+                                        data.newlyRegistered.forEach(r => {
+                                            content.innerHTML += `- ${r.url} (Port: ${r.port}, Mode: ${r.mode})\n`;
+                                        });
+                                    } else {
+                                        content.innerHTML += "No new open ports found.\n";
+                                    }
+                                    content.scrollTop = content.scrollHeight;
+                                    fetchMetrics();
+                                }
+                            } catch (e) {}
+                        }
+                    }
+                }
+            } catch (e) {
+                document.getElementById('deploy-stop-btn').style.display = 'none';
+                content.innerHTML += `\n\n[ERROR] Connection failed: ${e.message}\n`;
+            }
+
+            document.getElementById('deploy-close-btn').style.display = 'block';
+            document.getElementById('deploy-progress-btn').style.display = 'block';
+        }
         
         async function submitRegister(e) {
             e.preventDefault();
@@ -1164,8 +1351,10 @@
                 mode: document.getElementById('reg-mode').value
             };
             const typeVal = document.getElementById('reg-type').value;
-            if (typeVal === 'tls') {
+            if (typeVal === 'https') {
                 exposeItem.protocol = 'https';
+            } else if (typeVal === 'http') {
+                exposeItem.protocol = 'http';
             }
             if (port === 22) {
                 exposeItem.idleTimeout = parseInt(document.getElementById('reg-timeout').value) || 0;
@@ -1223,7 +1412,7 @@
                 opt.disabled = true;
             });
             
-            if (type === 'tls') {
+            if (type === 'http' || type === 'https') {
                 modeSelect.querySelector('option[value="public"]').style.display = '';
                 modeSelect.querySelector('option[value="public"]').disabled = false;
                 modeSelect.querySelector('option[value="private"]').style.display = '';
@@ -1437,8 +1626,120 @@
                     body: JSON.stringify({ vmid: parseInt(vmid) })
                 });
                 if (res.ok) fetchMetrics();
-                else alert("Failed to delete container routes.");
-            } catch (e) { alert("Connection error."); }
+                else {
+                    const err = await res.json();
+                    alert("Delete failed: " + err.error);
+                }
+            } catch(e) {
+                console.error("Delete all failed", e);
+            }
+        }
+
+        async function wipeAllServices() {
+            const confirmed = await customConfirm('⚠️ WIPE ENTIRE CLUSTER ROUTES ⚠️', `
+            <div style="color: var(--danger); font-size: 1.1rem; margin-bottom: 1rem; font-weight: bold;">
+                DANGER: This action is destructive!
+            </div>
+            <div style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.5;">
+                This will instantly delete ALL registered services across EVERY VM and LXC container in this gateway. 
+                <br><br>
+                All external traffic to your services will be immediately dropped. 
+                The Gateway Admin Dashboard and Beszel Monitoring routes will be preserved to prevent lockout.
+            </div>
+            <div style="background: rgba(239, 68, 68, 0.1); border-radius: 8px; padding: 15px; text-align: center; border: 1px solid var(--danger);">
+                <div style="font-size: 1.05rem; font-weight: 500; color: #fca5a5;">
+                    Are you absolutely sure you want to wipe all routes?
+                </div>
+            </div>
+            `);
+            
+            if (!confirmed) return;
+
+            // Double confirmation for extreme safety
+            const doubleConfirmed = await customConfirm('🔥 FINAL WARNING 🔥', `
+                <div style="color: var(--danger); font-size: 1.1rem; margin-bottom: 1rem; font-weight: bold;">
+                    THERE IS NO UNDO.
+                </div>
+                <div style="color: var(--text-muted); font-size: 0.95rem;">
+                    If you proceed, all routing configurations will be permanently destroyed.
+                </div>
+            `);
+
+            if (!doubleConfirmed) return;
+
+            document.getElementById('deploy-progress-title').innerText = "Wiping Cluster...";
+            const content = document.getElementById('deploy-progress-content');
+            const progressContainer = document.getElementById('deploy-progress-bar-container');
+            const progressFill = document.getElementById('deploy-progress-bar-fill');
+            const progressText = document.getElementById('deploy-progress-text');
+            
+            content.innerHTML = "Initializing cluster wipe...\nThis may take a moment.\n\n";
+            progressFill.style.width = '0%';
+            progressText.innerText = '0%';
+            progressContainer.style.display = 'block';
+            progressText.style.display = 'inline';
+            
+            document.getElementById('deploy-progress-overlay').classList.remove('hidden');
+            document.getElementById('deploy-close-btn').style.display = 'none';
+            document.getElementById('deploy-progress-btn').style.display = 'none';
+            document.getElementById('deploy-stop-btn').style.display = 'block';
+
+            currentAbortController = new AbortController();
+
+            try {
+                const res = await fetch('/services/all', {
+                    method: 'DELETE',
+                    headers: { 'x-api-key': apiKey },
+                    signal: currentAbortController.signal
+                });
+                
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder("utf-8");
+                let buffer = "";
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n\n');
+                    buffer = lines.pop(); // keep incomplete chunk
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(line.substring(6));
+                                if (data.progress) {
+                                    const pct = Math.round((data.progress.current / data.progress.total) * 100);
+                                    progressFill.style.width = pct + '%';
+                                    progressText.innerText = pct + '%';
+                                } else if (data.log) {
+                                    content.innerHTML += data.log + "\n";
+                                    content.scrollTop = content.scrollHeight;
+                                } else if (data.error) {
+                                    document.getElementById('deploy-stop-btn').style.display = 'none';
+                                    content.innerHTML += `\n[ERROR] ${data.error}\n`;
+                                    content.scrollTop = content.scrollHeight;
+                                } else if (data.done) {
+                                    document.getElementById('deploy-stop-btn').style.display = 'none';
+                                    progressFill.style.width = '100%';
+                                    progressText.innerText = '100%';
+                                    content.innerHTML += "\n\nWipe Complete!\n";
+                                    content.innerHTML += `\n${data.message}\n`;
+                                    content.scrollTop = content.scrollHeight;
+                                    fetchMetrics();
+                                }
+                            } catch (e) {}
+                        }
+                    }
+                }
+            } catch(e) {
+                document.getElementById('deploy-stop-btn').style.display = 'none';
+                content.innerHTML += `\n\n[ERROR] Connection failed: ${e.message}\n`;
+            }
+
+            document.getElementById('deploy-close-btn').style.display = 'block';
+            document.getElementById('deploy-progress-btn').style.display = 'block';
         }
 
         async function deleteBeszelSystem(sysName) {
@@ -1606,9 +1907,17 @@
             for (const vmid of vmidKeys) {
                 const svcs = grouped[vmid];
                 const ip = svcs.length > 0 ? svcs[0].target.split(':')[0] : 'Unknown';
-                
                 const isQemu = svcs.length > 0 && svcs[0].envType === 'qemu';
-                const title = isQemu ? `Virtual Machine: <b>VMID ${vmid}</b>` : `LXC Container: <b>VMID ${vmid}</b>`;
+                let extractedHostname = '';
+                if (svcs.length > 0 && svcs[0].hostname) {
+                    const parts = svcs[0].hostname.split('.')[0].split('-');
+                    const vmidIdx = parts.indexOf(String(vmid));
+                    if (vmidIdx !== -1 && vmidIdx < parts.length - 1) {
+                        extractedHostname = parts.slice(vmidIdx + 1).join('-');
+                    }
+                }
+                const typeText = isQemu ? 'VM' : 'LXC';
+                const title = `<span style="font-size: 1.1rem; font-weight: 500;">${typeText} <b>${vmid}</b></span>`;
                 
                 let beszelStatus = undefined;
                 let beszelSysId = '';
@@ -1720,9 +2029,11 @@
                     <div class="vmid-group">
                         <div class="vmid-header">
                             <div style="display: flex; flex-direction: column;">
-                                <span>${title}</span>
-                                <span style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; font-family: monospace;">IP: ${ip}</span>
+                                ${title}
+                                <span style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px; font-family: monospace;">Hostname: ${extractedHostname || 'Unknown'}</span>
+                                <span style="font-size: 0.85rem; color: var(--text-muted); margin-top: 2px; font-family: monospace;">IP: ${ip}</span>
                             </div>
+                            <div style="flex: 1; height: 1px; background: var(--card-border); margin: 0 15px;"></div>
                             <div class="vmid-header-actions">
                                 <button class="btn-primary btn-sm" onclick="openRegister(${vmid})">
                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
@@ -1738,18 +2049,18 @@
                             <table>
                                 <thead>
                                     <tr>
-                                        <th onclick="setSort('status')" class="${getSortClass('status')}">Status</th>
-                                        <th onclick="setSort('hostname')" class="${getSortClass('hostname')}">Connection Link</th>
-                                        <th onclick="setSort('target')" class="${getSortClass('target')}">LXC Port</th>
-                                        <th class="no-sort">Service</th>
-                                        <th onclick="setSort('mode')" class="${getSortClass('mode')}">Mode</th>
-                                        <th class="no-sort">Active</th>
-                                        <th onclick="setSort('latency')" class="${getSortClass('latency')}">Latency</th>
-                                        <th onclick="setSort('requests')" class="${getSortClass('requests')}">Requests</th>
-                                        <th onclick="setSort('bytesTx')" class="${getSortClass('bytesTx')}">Traffic (Rx / Tx)</th>
-                                        <th onclick="setSort('createdAt')" class="${getSortClass('createdAt')}">Date Added</th>
-                                        <th class="no-sort" style="width:60px;">Action</th>
-                                        <th class="no-sort" style="min-width:140px;">Monitoring</th>
+                                        <th onclick="setSort('status')" class="${getSortClass('status')}" style="width: 80px;">Status</th>
+                                        <th onclick="setSort('hostname')" class="${getSortClass('hostname')}" style="width: 320px;">Connection Link</th>
+                                        <th onclick="setSort('target')" class="${getSortClass('target')}" style="width: 100px;">LXC Port</th>
+                                        <th class="no-sort" style="width: 100px;">Service</th>
+                                        <th onclick="setSort('mode')" class="${getSortClass('mode')}" style="width: 90px;">Mode</th>
+                                        <th class="no-sort" style="width: 70px;">Active</th>
+                                        <th onclick="setSort('latency')" class="${getSortClass('latency')}" style="width: 80px;">Latency</th>
+                                        <th onclick="setSort('requests')" class="${getSortClass('requests')}" style="width: 90px;">Requests</th>
+                                        <th onclick="setSort('bytesTx')" class="${getSortClass('bytesTx')}" style="width: 130px;">Traffic (Rx / Tx)</th>
+                                        <th onclick="setSort('createdAt')" class="${getSortClass('createdAt')}" style="width: 140px;">Date Added</th>
+                                        <th class="no-sort" style="width: 60px;">Action</th>
+                                        <th class="no-sort" style="width: 140px;">Monitoring</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1798,7 +2109,7 @@
                     html += `
                         <tr>
                             <td>${getStatusBadge(svc.status)}</td>
-                            <td>${urlHtml}</td>
+                            <td style="max-width: 350px; word-break: break-all; white-space: normal;">${urlHtml}</td>
                             <td><span class="target-tag">${svc.protocol === 'https' ? '<span style="color:var(--success);font-weight:bold;margin-right:4px;">[HTTPS]</span>' : ''}${svc.target.split(':')[1]}</span></td>
                             <td><span class="target-tag" style="background: rgba(59, 130, 246, 0.15); color: var(--accent); border-color: rgba(59,130,246,0.3); font-weight: 600;">${getPortName(svc.target)}</span></td>
                             ${modeHtml}

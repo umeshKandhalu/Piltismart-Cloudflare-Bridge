@@ -1386,6 +1386,402 @@ adminApp.get('/services', async (req, res) => {
 
 /**
  * @swagger
+ * /vms:
+ *   get:
+ *     summary: List all Proxmox VMs and LXCs with routes and Beszel monitoring
+ *     description: |
+ *       Returns every VM and LXC on the Proxmox node, enriched with:
+ *       - Their registered Cloudflare gateway routes
+ *       - Live Beszel monitoring status and direct deep-link URL
+ *       - Proxmox resource stats (CPU, memory, uptime)
+ *
+ *       Results are sorted with **running** containers first, then by VMID.
+ *     tags: [Infrastructure]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: Successfully retrieved VM list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 node:
+ *                   type: string
+ *                   example: gold
+ *                 total:
+ *                   type: integer
+ *                   description: Total number of VMs/LXCs
+ *                   example: 27
+ *                 running:
+ *                   type: integer
+ *                   description: Number currently running
+ *                   example: 24
+ *                 registered:
+ *                   type: integer
+ *                   description: Number with at least one gateway route
+ *                   example: 4
+ *                 monitored:
+ *                   type: integer
+ *                   description: Number with Beszel agent active (status=up)
+ *                   example: 3
+ *                 vms:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       vmid:
+ *                         type: integer
+ *                         example: 101
+ *                       name:
+ *                         type: string
+ *                         example: ollama
+ *                       type:
+ *                         type: string
+ *                         enum: [lxc, qemu]
+ *                         example: lxc
+ *                       status:
+ *                         type: string
+ *                         enum: [running, stopped, paused]
+ *                         example: running
+ *                       node:
+ *                         type: string
+ *                         example: gold
+ *                       cpu:
+ *                         type: number
+ *                         description: CPU usage fraction (0–1)
+ *                         example: 0.02
+ *                       mem:
+ *                         type: integer
+ *                         description: Current memory usage in bytes
+ *                         example: 2147483648
+ *                       maxmem:
+ *                         type: integer
+ *                         description: Maximum memory in bytes
+ *                         example: 8589934592
+ *                       uptime:
+ *                         type: integer
+ *                         description: Uptime in seconds
+ *                         example: 86400
+ *                       primary_ip:
+ *                         type: string
+ *                         nullable: true
+ *                         description: IP address derived from registered routes
+ *                         example: "192.168.0.28"
+ *                       routes_count:
+ *                         type: integer
+ *                         description: Number of registered gateway routes
+ *                         example: 1
+ *                       routes:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             hostname:
+ *                               type: string
+ *                               example: pb11434-gold-101-ollama.piltismart.com
+ *                             url:
+ *                               type: string
+ *                               example: https://pb11434-gold-101-ollama.piltismart.com
+ *                             target:
+ *                               type: string
+ *                               example: "192.168.0.28:11434"
+ *                             mode:
+ *                               type: string
+ *                               enum: [public, private, tcp, secure_tcp]
+ *                             status:
+ *                               type: string
+ *                               enum: [online, offline, unknown]
+ *                             latency:
+ *                               type: integer
+ *                               description: Last measured latency in ms
+ *                             createdAt:
+ *                               type: string
+ *                               format: date-time
+ *                       beszel:
+ *                         type: object
+ *                         nullable: true
+ *                         description: Beszel monitoring info (null if agent not installed)
+ *                         properties:
+ *                           status:
+ *                             type: string
+ *                             enum: [up, down]
+ *                             example: up
+ *                           id:
+ *                             type: string
+ *                             description: PocketBase record ID for direct URL navigation
+ *                             example: r57f113f3208f3f
+ *                           name:
+ *                             type: string
+ *                             description: System name as registered in Beszel
+ *                             example: ollama
+ *                           monitoring_url:
+ *                             type: string
+ *                             description: Direct deep-link to Beszel system metrics page
+ *                             example: https://beszel-gold-gateway.piltismart.com/system/r57f113f3208f3f
+ *       500:
+ *         description: Failed to reach Proxmox API
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error: { type: string }
+ *                 detail: { type: string }
+ */
+adminApp.get('/vms', async (req, res) => {
+    try {
+        await getPveTicket();
+        const headers = { 'Cookie': pveAuthCookie, 'CSRFPreventionToken': pveCsrfToken };
+
+        // Fetch all LXCs and VMs from Proxmox
+        const [lxcRes, qemuRes] = await Promise.allSettled([
+            pveAxios.get(`/api2/json/nodes/${PVE_NODE}/lxc`, { headers }),
+            pveAxios.get(`/api2/json/nodes/${PVE_NODE}/qemu`, { headers })
+        ]);
+
+        const lxcs = (lxcRes.status === 'fulfilled' ? lxcRes.value.data.data : []).map(v => ({ ...v, type: 'lxc' }));
+        const qemus = (qemuRes.status === 'fulfilled' ? qemuRes.value.data.data : []).map(v => ({ ...v, type: 'qemu' }));
+        const allVms = [...lxcs, ...qemus];
+
+        // Build a lookup of registered routes per VMID
+        const routesByVmid = {};
+        for (const [hostname, data] of Object.entries(routes)) {
+            const vid = String(data.vmid);
+            if (!routesByVmid[vid]) routesByVmid[vid] = [];
+            routesByVmid[vid].push({
+                hostname,
+                url: `https://${hostname}`,
+                target: data.target,
+                mode: data.mode,
+                status: data.status,
+                latency: data.latency,
+                createdAt: data.createdAt
+            });
+        }
+
+        // Build a lookup of Beszel status per IP
+        const beszelByIp = {};
+        for (const [ip, entry] of Object.entries(beszelStatusCache)) {
+            beszelByIp[ip] = typeof entry === 'object' ? entry : { status: entry };
+        }
+
+        // Enrich each VM entry
+        const vms = allVms.map(vm => {
+            const vmid = String(vm.vmid);
+            const registeredRoutes = routesByVmid[vmid] || [];
+
+            // Try to find the primary IP from registered routes
+            const primaryIp = registeredRoutes.length > 0
+                ? registeredRoutes[0].target.split(':')[0]
+                : null;
+
+            const beszel = primaryIp ? (beszelByIp[primaryIp] || null) : null;
+
+            return {
+                vmid: vm.vmid,
+                name: vm.name || vm.hostname || `vmid-${vm.vmid}`,
+                type: vm.type,
+                status: vm.status,
+                node: PVE_NODE,
+                cpu: vm.cpu,
+                mem: vm.mem,
+                maxmem: vm.maxmem,
+                disk: vm.disk,
+                uptime: vm.uptime,
+                primary_ip: primaryIp,
+                routes: registeredRoutes,
+                routes_count: registeredRoutes.length,
+                beszel: beszel ? {
+                    status: beszel.status,
+                    id: beszel.id || null,
+                    name: beszel.name || null,
+                    monitoring_url: beszel.id
+                        ? `https://beszel-${PVE_NODE}-gateway.${BASE_DOMAIN}/system/${beszel.id}`
+                        : null
+                } : null
+            };
+        });
+
+        // Sort: running first, then by vmid
+        vms.sort((a, b) => {
+            if (a.status === 'running' && b.status !== 'running') return -1;
+            if (a.status !== 'running' && b.status === 'running') return 1;
+            return a.vmid - b.vmid;
+        });
+
+        res.json({
+            node: PVE_NODE,
+            total: vms.length,
+            running: vms.filter(v => v.status === 'running').length,
+            registered: vms.filter(v => v.routes_count > 0).length,
+            monitored: vms.filter(v => v.beszel && v.beszel.status === 'up').length,
+            vms
+        });
+    } catch (e) {
+        console.error('[Gateway] /vms error:', e.message);
+        res.status(500).json({ error: 'Failed to fetch VM list from Proxmox', detail: e.message });
+    }
+});
+
+// Helper for TCP port scanning
+async function scanPorts(ip, ports) {
+    const openPorts = [];
+    const scanPromises = ports.map(port => {
+        return new Promise(resolve => {
+            const socket = new require('net').Socket();
+            socket.setTimeout(500); // Fast timeout for local network
+            socket.on('connect', () => {
+                socket.destroy();
+                resolve(port);
+            });
+            socket.on('timeout', () => {
+                socket.destroy();
+                resolve(null);
+            });
+            socket.on('error', () => {
+                socket.destroy();
+                resolve(null);
+            });
+            socket.connect(port, ip);
+        });
+    });
+
+    const results = await Promise.all(scanPromises);
+    for (const res of results) {
+        if (res !== null) openPorts.push(res);
+    }
+    return openPorts;
+}
+
+/**
+ * @swagger
+ * /services/auto-discover:
+ *   post:
+ *     summary: Auto-scan all running VMs and register discovered services
+ *     tags: [Infrastructure]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: Successfully scanned and registered services
+ */
+adminApp.post('/services/auto-discover', async (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const sendMsg = (msg) => {
+        res.write(`data: ${JSON.stringify(msg)}\n\n`);
+    };
+
+    try {
+        sendMsg({ log: "Starting cluster-wide port scan..." });
+        await getPveTicket();
+        const headers = { 'Cookie': pveAuthCookie, 'CSRFPreventionToken': pveCsrfToken };
+
+        const [lxcRes, qemuRes] = await Promise.allSettled([
+            pveAxios.get(`/api2/json/nodes/${PVE_NODE}/lxc`, { headers }),
+            pveAxios.get(`/api2/json/nodes/${PVE_NODE}/qemu`, { headers })
+        ]);
+
+        const lxcs = (lxcRes.status === 'fulfilled' ? lxcRes.value.data.data : []).map(v => ({ ...v, type: 'lxc' }));
+        const qemus = (qemuRes.status === 'fulfilled' ? qemuRes.value.data.data : []).map(v => ({ ...v, type: 'qemu' }));
+        const allVms = [...lxcs, ...qemus].filter(vm => vm.status === 'running');
+
+        sendMsg({ log: `Found ${allVms.length} running VMs/LXCs. Beginning deep scan...` });
+
+        let portsToScan = [80, 443, 3000, 5000, 8000, 8080, 8090, 8123, 11434, 22, 3306, 5432];
+        if (req.body && Array.isArray(req.body.ports) && req.body.ports.length > 0) {
+            portsToScan = req.body.ports.filter(p => Number.isInteger(p) && p > 0 && p <= 65535);
+        }
+        
+        const registered = [];
+        const totalVms = allVms.length;
+        let currentVmIdx = 0;
+        let isCancelled = false;
+
+        req.on('close', () => {
+            console.log('[Gateway] Auto-discover stream aborted by client.');
+            isCancelled = true;
+        });
+
+        // Scan concurrently but gracefully
+        for (const vm of allVms) {
+            if (isCancelled) {
+                sendMsg({ log: "Operation cancelled by user." });
+                break;
+            }
+            
+            currentVmIdx++;
+            try {
+                let ip, hostname;
+                if (vm.type === 'qemu') {
+                    const details = await discoverVmDetails(vm.vmid);
+                    ip = details.ip; hostname = details.hostname;
+                } else {
+                    const details = await discoverLxcDetails(vm.vmid);
+                    ip = details.ip; hostname = details.hostname;
+                }
+
+                if (!ip) {
+                    sendMsg({ progress: { current: currentVmIdx, total: totalVms } });
+                    continue;
+                }
+                
+                sendMsg({ log: `Scanning VMID ${vm.vmid} (${hostname}) at ${ip}...` });
+                sendMsg({ progress: { current: currentVmIdx, total: totalVms } });
+
+                const openPorts = await scanPorts(ip, portsToScan);
+                if (openPorts.length === 0) continue;
+
+                sendMsg({ log: `→ VMID ${vm.vmid} (${hostname}) open ports: ${openPorts.join(', ')}` });
+
+                for (const port of openPorts) {
+                    // Check if already registered
+                    let exists = false;
+                    for (const route of Object.values(routes)) {
+                        if (route.vmid === vm.vmid && route.target === `${ip}:${port}`) {
+                            exists = true;
+                            break;
+                        }
+                    }
+
+                    if (!exists) {
+                        let mode = 'public';
+                        let protocol = 'http';
+                        let idleTimeout = 0;
+
+                        if (port === 443 || port === 8006) protocol = 'https';
+                        if (port === 22) { mode = 'tcp'; idleTimeout = 30; }
+                        if ([3306, 5432].includes(port)) mode = 'secure_tcp';
+
+                        const expose = [{ port, mode, protocol, idleTimeout }];
+                        const urls = await registerService(vm.vmid, hostname, ip, expose, false, vm.type);
+                        registered.push(...urls);
+                    }
+                }
+            } catch (err) {
+                // Ignore VMs that don't have networking fully up yet
+                sendMsg({ progress: { current: currentVmIdx, total: totalVms } });
+                continue;
+            }
+        }
+
+        sendMsg({ done: true, message: "Scan complete", newlyRegistered: registered });
+    } catch (e) {
+        console.error('[Auto-Discover] error:', e.message);
+        sendMsg({ error: 'Auto-discovery failed: ' + e.message });
+    } finally {
+        res.end();
+    }
+});
+
+
+
+/**
+ * @swagger
  * /services:
  *   delete:
  *     summary: Unregister/delete existing URLs for a container
@@ -1467,6 +1863,86 @@ adminApp.delete('/services', async (req, res) => {
     await updateTunnelIngress();
 
     res.json({ message: `Successfully deleted ${deletedCount} URLs.` });
+});
+
+/**
+ * @swagger
+ * /services/all:
+ *   delete:
+ *     summary: Wipe ALL registered services across all VMs (except the gateway itself)
+ *     tags: [Infrastructure]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200: { description: "All services deleted" }
+ */
+adminApp.delete('/services/all', async (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const sendMsg = (msg) => {
+        res.write(`data: ${JSON.stringify(msg)}\n\n`);
+    };
+
+    try {
+        let deletedCount = 0;
+        const hostnamesToDelete = [];
+        const adminHostname = `admin-${PVE_NODE || 'proxmox'}-gateway.${BASE_DOMAIN}`;
+        const beszelHostname = `beszel-${PVE_NODE || 'proxmox'}-gateway.${BASE_DOMAIN}`;
+
+        sendMsg({ log: "Identifying cluster-wide routes for deletion..." });
+
+        for (const [hostname, data] of Object.entries(routes)) {
+            // Protect the active gateway dashboard and Beszel hub from deletion!
+            if (hostname === adminHostname || hostname === beszelHostname || (data.vmid === 999 && data.target.endsWith(':8080'))) {
+                continue;
+            }
+            hostnamesToDelete.push(hostname);
+        }
+
+        if (hostnamesToDelete.length === 0) {
+            sendMsg({ error: "No URLs found to delete." });
+            return;
+        }
+
+        const totalRoutes = hostnamesToDelete.length;
+        let currentRouteIdx = 0;
+        let isCancelled = false;
+
+        req.on('close', () => {
+            console.log('[Gateway] Cluster wipe stream aborted by client.');
+            isCancelled = true;
+        });
+
+        sendMsg({ log: `Found ${totalRoutes} routes to wipe. Deleting...` });
+
+        for (const hostname of hostnamesToDelete) {
+            if (isCancelled) {
+                sendMsg({ log: "Wipe operation cancelled by user." });
+                break;
+            }
+            
+            currentRouteIdx++;
+            sendMsg({ log: `→ Wiping route: ${hostname}` });
+            await deleteRouteState(hostname);
+            deletedCount++;
+            sendMsg({ progress: { current: currentRouteIdx, total: totalRoutes } });
+        }
+
+        saveState();
+        logAudit(req.user, 'WIPE_CLUSTER', `Wiped all ${deletedCount} route(s) across cluster.`);
+        
+        sendMsg({ log: "Applying changes to Cloudflare tunnel configuration..." });
+        await updateTunnelIngress();
+
+        sendMsg({ done: true, message: `Successfully wiped ${deletedCount} routes from the cluster.` });
+    } catch (e) {
+        console.error('[Gateway] Failed to execute mass wipe:', e);
+        sendMsg({ error: "Wipe operation encountered an error: " + e.message });
+    } finally {
+        res.end();
+    }
 });
 
 adminApp.listen(ADMIN_PORT, '0.0.0.0', () => {
@@ -1697,88 +2173,97 @@ const dynamicProxy = createProxyMiddleware({
     proxyTimeout: 10 * 60 * 1000, // 10 minutes — needed for Ollama/LLM streaming
     timeout: 10 * 60 * 1000,
     logLevel: 'silent',
-    onProxyReq: function(proxyReq, req, res) {
-        const host = req.hostname || req.headers.host || '';
-        if (host.startsWith('beszel-')) {
-            const cookieHeader = req.headers.cookie;
-            let token;
-            if (cookieHeader) {
-                const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
-                    const [key, val] = cookie.split('=').map(c => c.trim());
-                    acc[key] = decodeURIComponent(val);
-                    return acc;
-                }, {});
-                token = cookies['gateway_token'];
-            }
-            let email;
-            if (token) {
-                if (sessions[token]) {
-                    email = sessions[token].user;
-                } else if (token.includes(':')) {
-                    const [u, sig] = token.split(':');
-                    const expectedSig = crypto.createHmac('sha256', GATEWAY_API_KEY).update(u).digest('hex');
-                    if (sig === expectedSig) {
-                        email = u;
-                        sessions[token] = { user: u, expires: Date.now() + 24 * 60 * 60 * 1000 };
+    on: {
+        proxyReq: function(proxyReq, req, res) {
+            const host = req.hostname || req.headers.host || '';
+            if (host.startsWith('beszel-')) {
+                const cookieHeader = req.headers.cookie;
+                let token;
+                if (cookieHeader) {
+                    const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
+                        const [key, val] = cookie.split('=').map(c => c.trim());
+                        acc[key] = decodeURIComponent(val);
+                        return acc;
+                    }, {});
+                    token = cookies['gateway_token'];
+                }
+                let email;
+                if (token) {
+                    if (sessions[token]) {
+                        email = sessions[token].user;
+                    } else if (token.includes(':')) {
+                        const [u, sig] = token.split(':');
+                        const expectedSig = crypto.createHmac('sha256', GATEWAY_API_KEY).update(u).digest('hex');
+                        if (sig === expectedSig) {
+                            email = u;
+                            sessions[token] = { user: u, expires: Date.now() + 24 * 60 * 60 * 1000 };
+                        }
                     }
                 }
-            }
-            if (email) {
-                console.log(`[PROXY DEBUG] Setting X-Webauth-User to: ${email} for path: ${req.url}`);
-                proxyReq.setHeader('X-Webauth-User', email);
-            }
-        }
-    },
-    onProxyReqWs: function(proxyReq, req, socket, options, head) {
-        const host = req.headers.host || '';
-        if (host.startsWith('beszel-')) {
-            const cookieHeader = req.headers.cookie;
-            let token;
-            if (cookieHeader) {
-                const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
-                    const [key, val] = cookie.split('=').map(c => c.trim());
-                    acc[key] = decodeURIComponent(val);
-                    return acc;
-                }, {});
-                token = cookies['gateway_token'];
-            }
-            let email;
-            if (token) {
-                if (sessions[token]) {
-                    email = sessions[token].user;
-                } else if (token.includes(':')) {
-                    const [u, sig] = token.split(':');
-                    const expectedSig = crypto.createHmac('sha256', GATEWAY_API_KEY).update(u).digest('hex');
-                    if (sig === expectedSig) {
-                        email = u;
-                        sessions[token] = { user: u, expires: Date.now() + 24 * 60 * 60 * 1000 };
-                    }
+                if (email) {
+                    console.log(`[PROXY DEBUG] Setting X-Webauth-User to: ${email} for path: ${req.url}`);
+                    proxyReq.setHeader('X-Webauth-User', email);
                 }
             }
-            if (email) {
-                proxyReq.setHeader('X-Webauth-User', email);
+        },
+        proxyReqWs: function(proxyReq, req, socket, options, head) {
+            const host = req.headers.host || '';
+            if (host.startsWith('beszel-')) {
+                const cookieHeader = req.headers.cookie;
+                let token;
+                if (cookieHeader) {
+                    const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
+                        const [key, val] = cookie.split('=').map(c => c.trim());
+                        acc[key] = decodeURIComponent(val);
+                        return acc;
+                    }, {});
+                    token = cookies['gateway_token'];
+                }
+                let email;
+                if (token) {
+                    if (sessions[token]) {
+                        email = sessions[token].user;
+                    } else if (token.includes(':')) {
+                        const [u, sig] = token.split(':');
+                        const expectedSig = crypto.createHmac('sha256', GATEWAY_API_KEY).update(u).digest('hex');
+                        if (sig === expectedSig) {
+                            email = u;
+                            sessions[token] = { user: u, expires: Date.now() + 24 * 60 * 60 * 1000 };
+                        }
+                    }
+                }
+                if (email) {
+                    proxyReq.setHeader('X-Webauth-User', email);
+                }
             }
-        }
-    },
-    onError: function(err, req, res) {
-        const host = req.hostname || req.headers.host || 'unknown';
-        const route = routes[host];
-        const target = route ? route.target : 'unknown';
-        console.error(`[Proxy Error] ${req.method} ${host}${req.url} -> ${target} | ${err.code || err.message}`);
+        },
+        error: function(err, req, res) {
+            const host = req.hostname || req.headers.host || 'unknown';
+            const route = routes[host];
+            const target = route ? route.target : 'unknown';
+            console.error(`[Proxy Error] ${req.method} ${host}${req.url} -> ${target} | ${err.code || err.message}`);
 
-        // Mark route as potentially offline for self-healing
-        if (route) {
-            route.status = 'offline';
-            route.lastError = err.message;
-        }
+            // Mark route as potentially offline for self-healing
+            if (route) {
+                route.status = 'offline';
+                route.lastError = err.message;
+            }
 
-        if (res.headersSent) return;
+            // res might be a socket if this is a WebSocket upgrade error
+            if (!res || !res.status) {
+                if (res && typeof res.destroy === 'function') {
+                    res.destroy();
+                }
+                return;
+            }
 
-        const accept = req.headers['accept'] || '';
-        if (accept.includes('application/json')) {
-            res.status(502).json({ error: 'Bad Gateway', message: `Could not connect to backend: ${target}`, code: err.code });
-        } else {
-            res.status(502).send(`<!DOCTYPE html>
+            if (res.headersSent) return;
+
+            const accept = req.headers['accept'] || '';
+            if (accept.includes('application/json')) {
+                res.status(502).json({ error: 'Bad Gateway', message: `Could not connect to backend: ${target}`, code: err.code });
+            } else {
+                res.status(502).send(`<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><title>Service Unavailable</title>
 <style>body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
 .card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:40px;max-width:500px;text-align:center}
@@ -1791,6 +2276,7 @@ a{color:#60a5fa;text-decoration:none}.btn{display:inline-block;margin-top:20px;p
 <p style="margin-top:16px;font-size:0.85rem;color:#64748b">Error: ${err.code || err.message}</p>
 <a href="javascript:history.back()" class="btn">← Go Back</a>
 </div></body></html>`);
+            }
         }
     }
 });

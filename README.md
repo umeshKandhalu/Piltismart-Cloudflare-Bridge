@@ -139,13 +139,61 @@ curl -X POST http://<GATEWAY_IP>:5000/register \
 *   `tcp`: provisions a Pinggy raw TCP URL. Requires `idleTimeout` in minutes (0 for infinite).
 *   `public` / `private`: provisions standard Cloudflare HTTP/S proxying.
 
-### List All Services
-Retrieve the current state, Cloudflare URLs, and **Health Status** of all registered LXCs:
+### List All VMs with Routes & Monitoring Status
+Returns every Proxmox LXC/VM enriched with their gateway routes, Beszel monitoring status, and resource usage. Sorted by running state then VMID.
+
 ```bash
-curl -X GET http://<GATEWAY_IP>:5000/services -H "x-api-key: your_api_key"
+curl https://admin-gold-gateway.piltismart.com/vms \
+  -H "x-api-key: pilti1234"
 ```
 
----
+**Response summary fields:**
+```json
+{
+  "node": "gold",
+  "total": 27,
+  "running": 24,
+  "registered": 4,
+  "monitored": 3,
+  "vms": [
+    {
+      "vmid": 101,
+      "name": "ollama",
+      "type": "lxc",
+      "status": "running",
+      "cpu": 0.02,
+      "mem": 2147483648,
+      "uptime": 86400,
+      "primary_ip": "192.168.0.28",
+      "routes_count": 1,
+      "routes": [
+        {
+          "hostname": "pb11434-gold-101-ollama.piltismart.com",
+          "url": "https://pb11434-gold-101-ollama.piltismart.com",
+          "target": "192.168.0.28:11434",
+          "mode": "public",
+          "status": "online"
+        }
+      ],
+      "beszel": {
+        "status": "up",
+        "id": "r57f113f3208f3f",
+        "name": "ollama",
+        "monitoring_url": "https://beszel-gold-gateway.piltismart.com/system/r57f113f3208f3f"
+      }
+    }
+  ]
+}
+```
+
+### List All Services (Routes Only)
+Retrieve the current state, Cloudflare URLs, and **Health Status** of all registered routes:
+```bash
+curl https://admin-gold-gateway.piltismart.com/services \
+  -H "x-api-key: pilti1234"
+```
+
+
 
 ## 📊 Beszel Monitoring Integration
 
