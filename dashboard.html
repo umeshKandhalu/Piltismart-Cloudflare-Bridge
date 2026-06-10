@@ -1441,6 +1441,27 @@
             } catch (e) { alert("Connection error."); }
         }
 
+        async function deleteBeszelSystem(sysName) {
+            const confirmed = await customConfirm('⚠️ Remove from Beszel', `Are you sure you want to completely remove <b>${sysName}</b> from Beszel monitoring?<br><br>This will delete its history and metrics. You can re-add it later.`);
+            if (!confirmed) return;
+            
+            try {
+                const res = await fetch(`/api/beszel/system/${encodeURIComponent(sysName)}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey }
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    alert("System removed from Beszel.");
+                    fetchMetrics();
+                } else {
+                    alert(`Failed to delete system: ${data.error || 'Unknown error'}`);
+                }
+            } catch (e) {
+                alert("Connection error while communicating with Gateway.");
+            }
+        }
+
         async function fetchMetrics() {
             if (!apiKey) return;
             try {
@@ -1589,9 +1610,23 @@
                 const isQemu = svcs.length > 0 && svcs[0].envType === 'qemu';
                 const title = isQemu ? `Virtual Machine: <b>VMID ${vmid}</b>` : `LXC Container: <b>VMID ${vmid}</b>`;
                 
-                let beszelStatus = window.beszelStatusCache ? window.beszelStatusCache[ip] : undefined;
+                let beszelStatus = undefined;
+                let beszelSysId = '';
+                let beszelSysName = '';
+                if (window.beszelStatusCache && window.beszelStatusCache[ip]) {
+                    const entry = window.beszelStatusCache[ip];
+                    if (typeof entry === 'object') {
+                        beszelStatus = entry.status;
+                        beszelSysId = entry.id || '';
+                        beszelSysName = entry.name || '';
+                    } else {
+                        // legacy string format fallback
+                        beszelStatus = entry;
+                    }
+                }
                 let beszelUrl = '#';
-                let sysName = vmid == 999 ? 'piltismart-gateway' : '';
+                let sysName = vmid == 999 ? 'piltismart-gateway' : (beszelSysName || '');
+                let sysId = vmid == 999 ? '' : beszelSysId; // Beszel record ID for URL
                 
                 if (beszelStatus === 'up' || beszelStatus === 'active') {
                     beszelStatus = 'active';
@@ -1607,7 +1642,8 @@
                         }
                         const hubRoute = cachedServices.find(s => s && s.hostname && s.hostname.startsWith(`beszel-${targetNode}-gateway`));
                         if (hubRoute) beszelUrl = hubRoute.url;
-                        
+
+                        // Fallback: derive sysName from route if Beszel DB didn't return it
                         if (!sysName) {
                             const autoRoute = svcs.find(s => s.hostname.includes(`-${vmid}-`));
                             if (autoRoute) {
@@ -1647,14 +1683,22 @@
                 let beszelBtnHtml = '';
                 if (beszelStatus === 'active') {
                     let btnUrl = beszelUrl;
-                    if (btnUrl !== '#' && sysName) {
-                        btnUrl = `${btnUrl}/__sso__?token=${encodeURIComponent(apiKey)}&redirect=/system/${sysName}`;
+                    // Prefer Beszel record ID for direct navigation; fall back to name-based route
+                    const redirectTarget = sysId ? `/system/${sysId}` : (sysName ? `/system/${sysName}` : '');
+                    if (btnUrl !== '#' && redirectTarget) {
+                        btnUrl = `${btnUrl}/__sso__?token=${encodeURIComponent(apiKey)}&redirect=${encodeURIComponent(redirectTarget)}`;
                     }
+                    const deleteTarget = sysName || sysId;
                     beszelBtnHtml = `
-                        <a href="${btnUrl}" target="_blank" class="btn-primary btn-sm" style="background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.5); text-decoration: none;" title="Open Beszel System Page">
-                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
-                            Beszel: Active
-                        </a>
+                        <div style="display: inline-flex; align-items: center;">
+                            <a href="${btnUrl}" target="_blank" class="btn-primary btn-sm" style="background: rgba(16, 185, 129, 0.2); color: var(--success); border: 1px solid rgba(16, 185, 129, 0.5); text-decoration: none; border-top-right-radius: 0; border-bottom-right-radius: 0; border-right: none;" title="Open Beszel System Page">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
+                                Beszel: Active
+                            </a>
+                            <button onclick="deleteBeszelSystem('${deleteTarget}')" class="btn-primary btn-sm" style="background: rgba(16, 185, 129, 0.2); color: var(--error, #ef4444); border: 1px solid rgba(16, 185, 129, 0.5); border-left: 1px solid rgba(16, 185, 129, 0.3); padding: 0 8px; border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: 0;" title="Delete system from Beszel">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                        </div>
                     `;
                 } else if (beszelStatus === 'pending') {
                     beszelBtnHtml = `
@@ -1684,7 +1728,6 @@
                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                                     Add Route
                                 </button>
-                                ${beszelBtnHtml}
                                 <button class="btn-primary btn-sm btn-danger" onclick="deleteContainer(${vmid})" title="Wipe all routes for this container">
                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                     Delete All
@@ -1706,12 +1749,15 @@
                                         <th onclick="setSort('bytesTx')" class="${getSortClass('bytesTx')}">Traffic (Rx / Tx)</th>
                                         <th onclick="setSort('createdAt')" class="${getSortClass('createdAt')}">Date Added</th>
                                         <th class="no-sort" style="width:60px;">Action</th>
+                                        <th class="no-sort" style="min-width:140px;">Monitoring</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                 `;
 
                 for (const svc of svcs) {
+                    const isFirstRow = svcs.indexOf(svc) === 0;
+                    const rowSpan = svcs.length;
                     const latencyStr = svc.latency > -1 ? `${svc.latency} <span class="metric-unit">ms</span>` : '--';
                     
                     let activeStr = '--';
@@ -1769,28 +1815,11 @@
                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
                                 </button>
                             </td>
+                            ${isFirstRow ? `<td rowspan="${rowSpan}" style="vertical-align: middle; text-align: center;">${beszelBtnHtml || '<span style="color:var(--text-muted); font-size:0.8rem;">—</span>'}</td>` : ''}
                         </tr>
                     `;
                 }
                 
-                if (beszelStatus === 'active' && beszelUrl !== '#' && sysName) {
-                    const beszelRouteUrl = `${beszelUrl}/__sso__?token=${encodeURIComponent(apiKey)}&redirect=/system/${sysName}`;
-                    html += `
-                        <tr style="background: rgba(16, 185, 129, 0.05);">
-                            <td>${getStatusBadge('active')}</td>
-                            <td><a href="${beszelRouteUrl}" target="_blank" class="card-url" style="color: var(--success); text-decoration: underline;">${sysName} (Beszel)</a></td>
-                            <td><span class="target-tag">Beszel UI</span></td>
-                            <td><span class="target-tag" style="background: rgba(16, 185, 129, 0.15); color: var(--success); border-color: rgba(16, 185, 129, 0.3); font-weight: 600;">Beszel Hub</span></td>
-                            <td style="text-transform: capitalize;">public</td>
-                            <td style="text-align: center;">--</td>
-                            <td class="metric-value">--</td>
-                            <td class="metric-value">--</td>
-                            <td class="metric-value">--</td>
-                            <td class="date-tag">--</td>
-                            <td></td>
-                        </tr>
-                    `;
-                }
 
                 html += `
                                 </tbody>
@@ -1804,10 +1833,28 @@
         }
 
         async function deployBeszelAgent(vmid) {
+            let scriptText = 'Loading script...';
+            try {
+                const scriptRes = await fetch('/api/beszel/script', {
+                    headers: { 'x-api-key': apiKey }
+                });
+                if (scriptRes.ok) {
+                    scriptText = await scriptRes.text();
+                } else {
+                    scriptText = 'Failed to load script from server.';
+                }
+            } catch (e) {
+                scriptText = 'Error loading script.';
+            }
+
             const confirmed = await customConfirm('Deploy Beszel Agent', `
-                <div style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.5rem;">
+                <div style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 1.0rem;">
                     Are you sure you want to manually deploy the Beszel Agent to <b>VMID ${vmid}</b>?
                 </div>
+                <div style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 600;">
+                    Script that will be executed:
+                </div>
+                <div style="background: var(--bg); padding: 10px; border-radius: 6px; border: 1px solid var(--border); font-family: monospace; font-size: 0.8rem; color: #4b5563; white-space: pre-wrap; word-break: break-all; max-height: 150px; overflow-y: auto; text-align: left;">${scriptText}</div>
             `);
             if (!confirmed) return;
 

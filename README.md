@@ -147,6 +147,101 @@ curl -X GET http://<GATEWAY_IP>:5000/services -H "x-api-key: your_api_key"
 
 ---
 
+## 📊 Beszel Monitoring Integration
+
+The Gateway includes a built-in integration with [Beszel](https://github.com/henrygd/beszel) — a lightweight server monitoring hub. Each registered VM/LXC can have the Beszel agent automatically deployed and tracked from the dashboard.
+
+### Via the Dashboard (Recommended)
+
+1. Navigate to your Gateway Dashboard (e.g., `https://admin-gold-gateway.piltismart.com`)
+2. Find the VM/LXC row you want to monitor
+3. Click the **"Add to Beszel"** button (blue `+` icon)
+4. A confirmation dialog will appear showing the **exact script** that will be executed
+5. Click **Confirm** to deploy — a live log stream will show progress in real time
+6. Once complete, the button turns green and shows **"Beszel: Active"**
+7. Click **"Beszel: Active"** to open the system's live metrics page directly in Beszel
+
+> The "Beszel: Active" button links directly to the correct system page using the PocketBase record ID — no manual navigation needed.
+
+---
+
+### Via the REST API
+
+#### Step 1 — Register the VM route (if not already done)
+
+```bash
+curl -X POST https://admin-gold-gateway.piltismart.com/register \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: pilti1234" \
+  -d '{
+    "vmid": 113,
+    "hostname": "test-kafka",
+    "ip": "192.168.0.70",
+    "expose": [{ "port": 80, "mode": "public" }],
+    "envType": "lxc"
+  }'
+```
+
+> Skip this step if the VM is already visible in the dashboard.
+
+#### Step 2 — Deploy the Beszel agent
+
+```bash
+curl -X POST https://admin-gold-gateway.piltismart.com/api/beszel/register \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: pilti1234" \
+  -d '{
+    "vmid": 113
+  }'
+```
+
+This will:
+- SSH into the VM via `lxc-attach` or Proxmox API
+- Download and install the Beszel agent binary
+- Register the system in the Beszel PocketBase database
+- Start the monitoring agent service
+
+#### Step 3 — Verify the agent is active
+
+```bash
+curl https://admin-gold-gateway.piltismart.com/services \
+  -H "x-api-key: pilti1234"
+```
+
+Look for the VM's entry — `beszel_status` should show `up` for that IP.
+
+#### Remove a system from Beszel
+
+```bash
+curl -X DELETE https://admin-gold-gateway.piltismart.com/api/beszel/system/Test-Kafka \
+  -H "x-api-key: pilti1234"
+```
+
+> Use the exact Beszel system name (case-sensitive, as stored in the database).
+
+#### Fetch the deploy script (preview only)
+
+```bash
+curl https://admin-gold-gateway.piltismart.com/api/beszel/script \
+  -H "x-api-key: pilti1234"
+```
+
+---
+
+### Beszel API Quick Reference
+
+| Action | Method | Endpoint |
+|--------|--------|----------|
+| Register VM route | `POST` | `/register` |
+| Deploy Beszel agent | `POST` | `/api/beszel/register` |
+| List all services & Beszel status | `GET` | `/services` |
+| Remove system from Beszel | `DELETE` | `/api/beszel/system/<name>` |
+| Preview deploy script | `GET` | `/api/beszel/script` |
+
+---
+
+
+
 ## 🛠️ Installation & Setup
 
 Deploy ONE Gateway container per Proxmox cluster using `docker-compose.yml`:

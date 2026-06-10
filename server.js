@@ -1149,6 +1149,54 @@ adminApp.post('/api/beszel/register', async (req, res) => {
 
 /**
  * @swagger
+ * /api/beszel/system/{name}:
+ *   delete:
+ *     summary: Delete a Beszel system directly from PocketBase by name
+ *     tags: [Monitoring]
+ *     parameters:
+ *       - in: path
+ *         name: name
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200: { description: "Success" }
+ *       500: { description: "Error" }
+ */
+adminApp.delete('/api/beszel/system/:name', async (req, res) => {
+    try {
+        const sysName = req.params.name;
+        if (!sysName) return res.status(400).json({ error: "Missing system name" });
+
+        // Ensure we send it as an authorized user (fallback to umesh@piltismart.com)
+        const email = (req.user && req.user !== "System/Automation") ? req.user : "umesh@piltismart.com"; 
+
+        // Look up the system ID first
+        const apiRes = await axios.get(`http://localhost:8090/api/collections/systems/records?filter=(name='${sysName}')`, {
+            headers: { 'X-Webauth-User': email },
+            timeout: 2000
+        });
+
+        if (!apiRes.data || !apiRes.data.items || apiRes.data.items.length === 0) {
+            return res.status(404).json({ error: "System not found in Beszel" });
+        }
+        
+        const sysId = apiRes.data.items[0].id;
+
+        await axios.delete(`http://localhost:8090/api/collections/systems/records/${sysId}`, {
+            headers: { 'X-Webauth-User': email }
+        });
+
+        logAudit(req.user, 'DELETE_BESZEL', `Deleted Beszel system: ${sysName} (${sysId})`);
+        res.json({ message: "System deleted successfully" });
+    } catch (e) {
+        console.error("[Gateway] Beszel direct delete error:", e.response ? e.response.data : e.message);
+        res.status(500).json({ error: "Failed to delete system from Beszel." });
+    }
+});
+
+/**
+ * @swagger
  * /api/beszel/script:
  *   get:
  *     summary: Generate Beszel Agent deployment script
@@ -1268,7 +1316,7 @@ let beszelStatusCache = {};
 function pollBeszelStatus() {
     try {
         const hostIP = new URL(PVE_URL).hostname;
-        const remotePollerCmd = `lxc-attach -n 999 -- sqlite3 -json /opt/gateway/beszel_data/data.db 'SELECT host, status FROM systems;'`;
+        const remotePollerCmd = `lxc-attach -n 999 -- sqlite3 -json /opt/gateway/beszel_data/data.db 'SELECT id, name, host, status FROM systems;'`;
         const sshCmd = `sshpass -p '${PVE_PASSWORD}' ssh -o StrictHostKeyChecking=no root@${hostIP} "ssh -o StrictHostKeyChecking=no ${PVE_NODE} \\"${remotePollerCmd}\\""`;
         exec(sshCmd, (error, stdout) => {
             if (!error && stdout) {
@@ -1276,7 +1324,11 @@ function pollBeszelStatus() {
                     const data = JSON.parse(stdout);
                     const newCache = {};
                     for (const item of data) {
-                        newCache[item.host] = item.status;
+                        newCache[item.host] = {
+                            status: item.status,
+                            id: item.id,
+                            name: item.name
+                        };
                     }
                     beszelStatusCache = newCache;
                 } catch(e) {}
@@ -1642,6 +1694,8 @@ const dynamicProxy = createProxyMiddleware({
     changeOrigin: true,
     ws: true,
     secure: false, // Bypass self-signed SSL cert errors for Proxmox/HTTPS backends
+    proxyTimeout: 10 * 60 * 1000, // 10 minutes — needed for Ollama/LLM streaming
+    timeout: 10 * 60 * 1000,
     logLevel: 'silent',
     onProxyReq: function(proxyReq, req, res) {
         const host = req.hostname || req.headers.host || '';
@@ -1670,6 +1724,7 @@ const dynamicProxy = createProxyMiddleware({
                 }
             }
             if (email) {
+                console.log(`[PROXY DEBUG] Setting X-Webauth-User to: ${email} for path: ${req.url}`);
                 proxyReq.setHeader('X-Webauth-User', email);
             }
         }
@@ -1703,6 +1758,39 @@ const dynamicProxy = createProxyMiddleware({
             if (email) {
                 proxyReq.setHeader('X-Webauth-User', email);
             }
+        }
+    },
+    onError: function(err, req, res) {
+        const host = req.hostname || req.headers.host || 'unknown';
+        const route = routes[host];
+        const target = route ? route.target : 'unknown';
+        console.error(`[Proxy Error] ${req.method} ${host}${req.url} -> ${target} | ${err.code || err.message}`);
+
+        // Mark route as potentially offline for self-healing
+        if (route) {
+            route.status = 'offline';
+            route.lastError = err.message;
+        }
+
+        if (res.headersSent) return;
+
+        const accept = req.headers['accept'] || '';
+        if (accept.includes('application/json')) {
+            res.status(502).json({ error: 'Bad Gateway', message: `Could not connect to backend: ${target}`, code: err.code });
+        } else {
+            res.status(502).send(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><title>Service Unavailable</title>
+<style>body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+.card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:40px;max-width:500px;text-align:center}
+h1{color:#f87171;margin:0 0 12px}p{color:#94a3b8;margin:8px 0}.tag{display:inline-block;background:#0f172a;border:1px solid #475569;border-radius:6px;padding:4px 10px;font-family:monospace;font-size:0.85rem;color:#64748b;margin-top:12px}
+a{color:#60a5fa;text-decoration:none}.btn{display:inline-block;margin-top:20px;padding:10px 20px;background:#3b82f6;color:#fff;border-radius:8px;text-decoration:none}</style>
+</head><body><div class="card">
+<h1>⚠️ Service Unreachable</h1>
+<p>The backend service could not be reached.</p>
+<div class="tag">${host}</div><br><div class="tag">${target}</div>
+<p style="margin-top:16px;font-size:0.85rem;color:#64748b">Error: ${err.code || err.message}</p>
+<a href="javascript:history.back()" class="btn">← Go Back</a>
+</div></body></html>`);
         }
     }
 });
