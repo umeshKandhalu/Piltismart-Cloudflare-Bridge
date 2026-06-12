@@ -709,7 +709,7 @@ adminApp.use(express.json());
 
 adminApp.use((req, res, next) => {
     // Allow public access to docs, dashboard UI, login, logout and favicon
-    if (req.path === '/' || req.path.startsWith('/docs') || req.path.startsWith('/dashboard') || req.path === '/login' || req.path === '/logout' || req.path === '/favicon.ico') {
+    if (req.path === '/' || req.path.startsWith('/docs') || req.path.startsWith('/api-docs') || req.path.startsWith('/dashboard') || req.path === '/login' || req.path === '/logout' || req.path === '/favicon.ico') {
         return next();
     }
     const apiKey = req.headers['x-api-key'] || req.query.api_key;
@@ -748,7 +748,7 @@ const swaggerOptions = {
     },
     apis: ['server.js'],
 };
-adminApp.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerJsdoc(swaggerOptions)));
+adminApp.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerJsdoc(swaggerOptions)));
 
 // --- PROXMOX API CLIENT ---
 const pveBaseUrl = PVE_URL ? PVE_URL.replace(/\/api2\/json\/?$/, '') : '';
@@ -1663,18 +1663,17 @@ async function scanPorts(ip, ports) {
  *     tags: [Infrastructure]
  *     security:
  *       - ApiKeyAuth: []
- *     parameters:
- *       - in: body
- *         name: body
- *         description: Auto-discover payload
- *         required: true
- *         schema:
- *           type: object
- *           properties:
- *             ports:
- *               type: array
- *               items: { type: integer }
- *             vmid: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               ports:
+ *                 type: array
+ *                 items: { type: integer }
+ *               vmid: { type: integer }
  *     responses:
  *       200:
  *         description: Successfully scanned and registered services
