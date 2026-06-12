@@ -201,6 +201,34 @@
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
         }
 
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+            border: 1px solid rgba(16, 185, 129, 0.5);
+            padding: 12px 24px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            pointer-events: none;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -825,6 +853,11 @@
             </form>
         </div>
     </div>
+    
+    <div id="clipboard-toast" class="toast">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        <span id="clipboard-toast-text">Copied to clipboard</span>
+    </div>
 
     <div class="container">
         <header>
@@ -1201,9 +1234,42 @@
             }
         }
 
+        function copyToClipboard(text, event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            navigator.clipboard.writeText(text).then(() => {
+                const toast = document.getElementById('clipboard-toast');
+                toast.classList.add('show');
+                setTimeout(() => {
+                    toast.classList.remove('show');
+                }, 3000);
+            }).catch(e => {
+                console.error('Failed to copy: ', e);
+            });
+        }
+
         const DEFAULT_DISCOVER_PORTS = [80, 443, 3000, 5000, 8000, 8080, 8090, 8123, 11434, 22, 3306, 5432];
 
+        function openAutoDiscoverSingleSetup(vmid) {
+            currentDiscoverVmid = vmid;
+            const grid = document.getElementById('autodiscover-ports-grid');
+            grid.innerHTML = '';
+            
+            DEFAULT_DISCOVER_PORTS.forEach(port => {
+                grid.innerHTML += `
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem;">
+                        <input type="checkbox" value="${port}" checked class="discover-port-checkbox"> 
+                        ${port}
+                    </label>
+                `;
+            });
+            document.getElementById('autodiscover-setup-overlay').classList.remove('hidden');
+        }
+
         function openAutoDiscoverSetup() {
+            currentDiscoverVmid = null;
             const grid = document.getElementById('autodiscover-ports-grid');
             grid.innerHTML = '';
             
@@ -1242,6 +1308,8 @@
             input.value = '';
         }
 
+        let currentDiscoverVmid = null;
+
         function startAutoDiscover() {
             const checkboxes = document.querySelectorAll('.discover-port-checkbox:checked');
             const selectedPorts = Array.from(checkboxes).map(cb => parseInt(cb.value));
@@ -1252,17 +1320,21 @@
             }
             
             closeAutoDiscoverSetup();
-            autoDiscoverAll(selectedPorts);
+            autoDiscoverAll(selectedPorts, currentDiscoverVmid);
         }
 
-        async function autoDiscoverAll(portsToScan) {
+        async function autoDiscoverAll(portsToScan, vmid = null) {
             document.getElementById('deploy-progress-title').innerText = "Scanning Network...";
             const content = document.getElementById('deploy-progress-content');
             const progressContainer = document.getElementById('deploy-progress-bar-container');
             const progressFill = document.getElementById('deploy-progress-bar-fill');
             const progressText = document.getElementById('deploy-progress-text');
             
-            content.innerHTML = `Initializing cluster-wide port scan on ports: ${portsToScan.join(', ')}...\nThis may take a few seconds.\n\n`;
+            if (vmid) {
+                content.innerHTML = `Initializing port scan for VM/LXC ${vmid} on ports: ${portsToScan.join(', ')}...\nThis may take a few seconds.\n\n`;
+            } else {
+                content.innerHTML = `Initializing cluster-wide port scan on ports: ${portsToScan.join(', ')}...\nThis may take a few seconds.\n\n`;
+            }
             progressFill.style.width = '0%';
             progressText.innerText = '0%';
             progressContainer.style.display = 'block';
@@ -1276,10 +1348,13 @@
             currentAbortController = new AbortController();
 
             try {
+                const bodyPayload = { ports: portsToScan };
+                if (vmid) bodyPayload.vmid = vmid;
+
                 const res = await fetch('/services/auto-discover', {
                     method: 'POST',
                     headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ports: portsToScan }),
+                    body: JSON.stringify(bodyPayload),
                     signal: currentAbortController.signal
                 });
                 
@@ -2035,6 +2110,10 @@
                             </div>
                             <div style="flex: 1; height: 1px; background: var(--card-border); margin: 0 15px;"></div>
                             <div class="vmid-header-actions">
+                                <button class="btn-primary btn-sm" onclick="openAutoDiscoverSingleSetup(${vmid})" style="background: var(--warning); color: #111;">
+                                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                                    Auto Route
+                                </button>
                                 <button class="btn-primary btn-sm" onclick="openRegister(${vmid})">
                                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                                     Add Route
@@ -2089,7 +2168,17 @@
                             </td>
                         `;
                     }
-                    let urlHtml = `<a href="${svc.url}" target="_blank" class="card-url">${svc.hostname}</a>`;
+                    let copyIconSvg = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14" xmlns="http://www.w3.org/2000/svg" style="cursor: pointer; opacity: 0.6; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6" title="Copy to clipboard"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>`;
+
+                    let urlHtml = `
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <a href="${svc.url}" target="_blank" class="card-url" style="overflow: hidden; text-overflow: ellipsis;">${svc.hostname}</a>
+                            <span onclick="copyToClipboard('${svc.url}', event)" style="display: flex; align-items: center;">
+                                ${copyIconSvg}
+                            </span>
+                        </div>
+                    `;
+                    
                     if (svc.mode === 'tcp' && svc.pinggyUrl) {
                         let copyText = svc.pinggyUrl;
                         try {
@@ -2100,8 +2189,9 @@
                         } catch(e) {}
                         
                         urlHtml = `
-                            <div style="display:flex; align-items:center; gap:6px;" title="Click to copy connection command" onclick="navigator.clipboard.writeText('${copyText}'); alert('Copied to clipboard: ' + '${copyText}');">
+                            <div style="display:flex; align-items:center; gap:8px;" title="Click to copy connection command" onclick="copyToClipboard('${copyText}', event)">
                                 <span style="font-family: monospace; font-size: 0.85rem; color: var(--text-main); cursor: pointer; border-bottom: 1px dashed rgba(255,255,255,0.2); padding-bottom: 1px;">${copyText}</span>
+                                <span style="display: flex; align-items: center;">${copyIconSvg}</span>
                             </div>
                         `;
                     }

@@ -1659,10 +1659,22 @@ async function scanPorts(ip, ports) {
  * @swagger
  * /services/auto-discover:
  *   post:
- *     summary: Auto-scan all running VMs and register discovered services
+ *     summary: Auto-scan VMs/LXCs and register discovered services
  *     tags: [Infrastructure]
  *     security:
  *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: body
+ *         name: body
+ *         description: Auto-discover payload
+ *         required: true
+ *         schema:
+ *           type: object
+ *           properties:
+ *             ports:
+ *               type: array
+ *               items: { type: integer }
+ *             vmid: { type: integer }
  *     responses:
  *       200:
  *         description: Successfully scanned and registered services
@@ -1688,9 +1700,13 @@ adminApp.post('/services/auto-discover', async (req, res) => {
 
         const lxcs = (lxcRes.status === 'fulfilled' ? lxcRes.value.data.data : []).map(v => ({ ...v, type: 'lxc' }));
         const qemus = (qemuRes.status === 'fulfilled' ? qemuRes.value.data.data : []).map(v => ({ ...v, type: 'qemu' }));
-        const allVms = [...lxcs, ...qemus].filter(vm => vm.status === 'running');
+        let allVms = [...lxcs, ...qemus].filter(vm => vm.status === 'running');
 
-        sendMsg({ log: `Found ${allVms.length} running VMs/LXCs. Beginning deep scan...` });
+        if (req.body && req.body.vmid) {
+            allVms = allVms.filter(vm => parseInt(vm.vmid) === parseInt(req.body.vmid));
+        }
+
+        sendMsg({ log: `Found ${allVms.length} running VMs/LXCs to scan. Beginning deep scan...` });
 
         let portsToScan = [80, 443, 3000, 5000, 8000, 8080, 8090, 8123, 11434, 22, 3306, 5432];
         if (req.body && Array.isArray(req.body.ports) && req.body.ports.length > 0) {
