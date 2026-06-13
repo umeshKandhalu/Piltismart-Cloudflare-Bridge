@@ -649,57 +649,71 @@ function pingTcp(host, port) {
     });
 }
 
+let isChecking = false;
 setInterval(async () => {
-    let stateChanged = false;
-    for (const [hostname, data] of Object.entries(routes)) {
-        const [host, port] = data.target.split(':');
-        if (host && port) {
-            const startPing = Date.now();
-            const currentStatus = await pingTcp(host, parseInt(port));
-            const latencyMs = currentStatus === 'online' ? Date.now() - startPing : -1;
-            
-            // Self-Healing IP Tracking
-            if (currentStatus === 'offline' && data.vmid) {
-                console.warn(`[Self-Healing] ${hostname} is offline. Checking Proxmox for IP drift...`);
-                try {
-                    const details = await discoverLxcDetails(data.vmid);
-                    if (details.ip && details.ip !== host) {
-                        console.log(`[Self-Healing] IP Drift Detected for VMID ${data.vmid}! Healing: ${host} -> ${details.ip}`);
-                        data.target = `${details.ip}:${port}`;
-                        data.status = await pingTcp(details.ip, parseInt(port));
-                        data.latency = data.status === 'online' ? Date.now() - startPing : -1;
-                        stateChanged = true;
-                    } else {
+    if (isChecking) {
+        console.warn("[Gateway] Previous health check is still running, skipping this interval.");
+        return;
+    }
+    isChecking = true;
+    try {
+        let stateChanged = false;
+        const entries = Object.entries(routes);
+        
+        await Promise.all(entries.map(async ([hostname, data]) => {
+            const [host, port] = data.target.split(':');
+            if (host && port) {
+                const startPing = Date.now();
+                const currentStatus = await pingTcp(host, parseInt(port));
+                const latencyMs = currentStatus === 'online' ? Date.now() - startPing : -1;
+                
+                // Self-Healing IP Tracking
+                if (currentStatus === 'offline' && data.vmid) {
+                    console.warn(`[Self-Healing] ${hostname} is offline. Checking Proxmox for IP drift...`);
+                    try {
+                        const details = await discoverLxcDetails(data.vmid);
+                        if (details.ip && details.ip !== host) {
+                            console.log(`[Self-Healing] IP Drift Detected for VMID ${data.vmid}! Healing: ${host} -> ${details.ip}`);
+                            data.target = `${details.ip}:${port}`;
+                            data.status = await pingTcp(details.ip, parseInt(port));
+                            data.latency = data.status === 'online' ? Date.now() - startPing : -1;
+                            stateChanged = true;
+                        } else {
+                            data.status = 'offline';
+                            data.latency = -1;
+                        }
+                    } catch (e) {
                         data.status = 'offline';
                         data.latency = -1;
                     }
-                } catch (e) {
-                    data.status = 'offline';
-                    data.latency = -1;
+                } else {
+                    data.status = currentStatus;
+                    data.latency = latencyMs;
                 }
-            } else {
-                data.status = currentStatus;
-                data.latency = latencyMs;
+                
+                data.lastChecked = new Date().toISOString();
             }
-            
-            data.lastChecked = new Date().toISOString();
-        }
 
-        // Ephemeral Idle Timeout Sweep
-        if (data.idleTimeout && data.activeConnections === 0) {
-            const idleMs = Date.now() - (data.lastActive || Date.now());
-            if (idleMs > data.idleTimeout * 60000) {
-                console.log(`[Gateway] Sweeping idle route ${hostname} (inactive for >${data.idleTimeout}m)`);
-                await deleteRouteState(hostname);
-                stateChanged = true;
-                logAudit("System/Automation", "IDLE_TIMEOUT_SWEEP", `Automatically deleted idle route ${hostname}`);
+            // Ephemeral Idle Timeout Sweep
+            if (data.idleTimeout && data.activeConnections === 0) {
+                const idleMs = Date.now() - (data.lastActive || Date.now());
+                if (idleMs > data.idleTimeout * 60000) {
+                    console.log(`[Gateway] Sweeping idle route ${hostname} (inactive for >${data.idleTimeout}m)`);
+                    await deleteRouteState(hostname);
+                    stateChanged = true;
+                    logAudit("System/Automation", "IDLE_TIMEOUT_SWEEP", `Automatically deleted idle route ${hostname}`);
+                }
             }
+        }));
+        
+        if (stateChanged) {
+            saveState();
+            await updateTunnelIngress();
         }
-    }
-    
-    if (stateChanged) {
-        saveState();
-        await updateTunnelIngress();
+    } catch (err) {
+        console.error("[Gateway] Health check loop error:", err.message);
+    } finally {
+        isChecking = false;
     }
 }, 15000);
 
