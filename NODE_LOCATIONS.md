@@ -2,13 +2,12 @@
 
 This document serves as a persistent reference for the physical locations of the PiltiSmart infrastructure nodes.
 
-### Madurai Nodes
-- **Purple**: `10.70.70.0/24` (SDN: `purplevn`)
-- **White**: `10.60.60.0/24` (SDN: `whitevn`)
-
-### Dublin Nodes
-- **Gold**: `10.50.50.0/24` (SDN: `goldvnet`)
-- **Pink**: `10.80.80.0/24` (SDN: `pinkvnet`)
+| Node Name | Location | SDN VNet | Subnet Range | Gateway VMID | Gateway SDN IP | Gateway Tailscale IP |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Purple** | Madurai | `purplevn` | `10.70.70.0/24` | 999 | `10.70.70.3` | `100.118.179.53` |
+| **White** | Madurai | `whitevn` | `10.60.60.0/24` | 999 | `10.60.60.4` | `100.68.97.57` |
+| **Pink** | Dublin | `goldvnet` | `10.50.50.0/24` | 999 | `10.50.50.3` | `100.88.139.76` |
+| **Gold** | Dublin | `pinkvnet` | `10.80.80.0/24` | 399 | None | `100.118.72.62` |
 
 ## Site-to-Site VPN Topology
 
