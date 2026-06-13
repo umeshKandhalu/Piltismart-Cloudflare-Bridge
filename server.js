@@ -1773,12 +1773,17 @@ adminApp.post('/services/auto-discover', async (req, res) => {
                         if ([3306, 5432].includes(port)) mode = 'secure_tcp';
 
                         const expose = [{ port, mode, protocol, idleTimeout }];
-                        const urls = await registerService(vm.vmid, hostname, ip, expose, false, vm.type);
-                        registered.push(...urls);
+                        try {
+                            const urls = await registerService(vm.vmid, hostname, ip, expose, false, vm.type);
+                            registered.push(...urls);
+                        } catch (err) {
+                            sendMsg({ log: `  ⚠ Failed to register port ${port}: ${err.message}` });
+                        }
                     }
                 }
             } catch (err) {
                 // Ignore VMs that don't have networking fully up yet
+                sendMsg({ log: `  ⚠ Error scanning VMID ${vm.vmid}: ${err.message}` });
                 sendMsg({ progress: { current: currentVmIdx, total: totalVms } });
                 continue;
             }
