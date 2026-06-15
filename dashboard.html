@@ -1908,11 +1908,11 @@
             let flattened = [];
             for (const [vmid, services] of Object.entries(data.services)) {
                 for (const svc of services) {
-                    const portStr = svc.target.split(':')[1];
+                    const portStr = svc.mode === 'redirect' ? '0' : svc.target.split(':')[1];
                     flattened.push({
                         ...svc,
                         vmid: parseInt(vmid),
-                        port: parseInt(portStr),
+                        port: parseInt(portStr) || 0,
                         requests: svc.metrics ? svc.metrics.requests : 0,
                         bytesRx: svc.metrics ? svc.metrics.bytesRx : 0,
                         bytesTx: svc.metrics ? svc.metrics.bytesTx : 0
@@ -2158,7 +2158,7 @@
                     const displayMode = svc.mode === 'tcp' ? 'private' : svc.mode;
                     
                     let modeHtml = `<td style="text-transform: capitalize;">${displayMode}</td>`;
-                    if (!svc.target.endsWith(':22') && svc.mode !== 'tcp') {
+                    if (!svc.target.endsWith(':22') && svc.mode !== 'tcp' && svc.mode !== 'redirect') {
                         modeHtml = `
                             <td>
                                 <select onchange="toggleRouteMode('${svc.hostname}', this.value, this, '${svc.mode}')" style="background: rgba(255,255,255,0.05); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 4px; padding: 4px 8px; font-size: 0.85rem; cursor: pointer; outline: none;">
@@ -2200,8 +2200,8 @@
                         <tr>
                             <td>${getStatusBadge(svc.status)}</td>
                             <td style="max-width: 350px; word-break: break-all; white-space: normal;">${urlHtml}</td>
-                            <td><span class="target-tag">${svc.protocol === 'https' ? '<span style="color:var(--success);font-weight:bold;margin-right:4px;">[HTTPS]</span>' : ''}${svc.target.split(':')[1]}</span></td>
-                            <td><span class="target-tag" style="background: rgba(59, 130, 246, 0.15); color: var(--accent); border-color: rgba(59,130,246,0.3); font-weight: 600;">${getPortName(svc.target)}</span></td>
+                            <td><span class="target-tag">${svc.mode === 'redirect' ? 'Redirect' : (svc.protocol === 'https' ? '<span style="color:var(--success);font-weight:bold;margin-right:4px;">[HTTPS]</span>' : '') + svc.target.split(':')[1]}</span></td>
+                            <td><span class="target-tag" style="background: rgba(59, 130, 246, 0.15); color: var(--accent); border-color: rgba(59,130,246,0.3); font-weight: 600;">${svc.mode === 'redirect' ? 'Beszel Hub' : getPortName(svc.target)}</span></td>
                             ${modeHtml}
                             <td style="text-align: center;">${activeStr}</td>
                             <td class="metric-value">${latencyStr}</td>
