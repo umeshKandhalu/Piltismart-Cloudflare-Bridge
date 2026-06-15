@@ -2178,6 +2178,17 @@
                             </span>
                         </div>
                     `;
+
+                    if (svc.mode === 'redirect') {
+                        urlHtml = `
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <a href="${svc.target}" target="_blank" class="card-url" style="overflow: hidden; text-overflow: ellipsis; color: var(--accent);">${svc.target}</a>
+                                <span onclick="copyToClipboard('${svc.target}', event)" style="display: flex; align-items: center;">
+                                    ${copyIconSvg}
+                                </span>
+                            </div>
+                        `;
+                    }
                     
                     if (svc.mode === 'tcp' && svc.pinggyUrl) {
                         let copyText = svc.pinggyUrl;
