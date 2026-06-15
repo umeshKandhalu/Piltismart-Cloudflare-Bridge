@@ -484,7 +484,8 @@ function deployBeszelAgent(vmid, hostname, ip, envType, onData, onExit) {
         remoteScript = `pct exec ${vmid} -- bash -c '${installCmd}'`;
     }
 
-    const sqlQuery = `DELETE FROM systems WHERE name = '${hostname}' OR host = '${ip}'; INSERT INTO systems (name, host, port, status, info, users, created, updated) VALUES ('${hostname}', '${ip}', '45876', 'pending', '{}', (SELECT json_group_array(id) FROM users), datetime('now'), datetime('now'));`;
+    const systemId = Array.from(require('crypto').randomFillSync(new Uint8Array(15))).map(x => "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"[x % 62]).join('');
+    const sqlQuery = `DELETE FROM systems WHERE name = '${hostname}' OR host = '${ip}'; INSERT INTO systems (id, name, host, port, status, info, users, created, updated) VALUES ('${systemId}', '${hostname}', '${ip}', '45876', 'pending', '{}', (SELECT json_group_array(id) FROM users), datetime('now'), datetime('now'));`;
     const sqlBase64 = Buffer.from(sqlQuery).toString('base64');
 
     const sqliteCmd = `echo ${sqlBase64} | base64 -d > /tmp/query.sql && sqlite3 /opt/gateway/beszel_data/data.db < /tmp/query.sql`;
@@ -536,6 +537,24 @@ function deployBeszelAgent(vmid, hostname, ip, envType, onData, onExit) {
             
             if (isUp) {
                 if(onData) onData(`[Gateway] Verification SUCCESS: Agent is actively listening on ${ip}:45876.\n`);
+                
+                const redirectHostname = `beszel-${vmid}-${hostname.toLowerCase().replace(/[^a-z0-9-]/g, '-')}.${BASE_DOMAIN}`;
+                const targetUrl = `https://beszel-${PVE_NODE || 'proxmox'}-gateway.${BASE_DOMAIN}/system/${systemId}`;
+                routes[redirectHostname] = {
+                    target: targetUrl,
+                    protocol: "https",
+                    mode: "redirect",
+                    vmid: parseInt(vmid),
+                    envType: envType,
+                    status: "online",
+                    lastChecked: new Date().toISOString(),
+                    createdAt: new Date().toISOString()
+                };
+                saveState();
+                createDnsRecord(redirectHostname).catch(console.error);
+                updateTunnelIngress().catch(console.error);
+                
+                if(onData) onData(`[Gateway] Auto-created Beszel Access Route: https://${redirectHostname}\n`);
                 if(onExit) onExit(0);
             } else {
                 if(onData) onData(`[Gateway] Verification FAILED: Agent is not reachable on ${ip}:45876. Please check firewall or container network.\n`);
@@ -2179,6 +2198,10 @@ proxyApp.use(async (req, res, next) => {
         }
     }
     
+    if (route && route.mode === 'redirect') {
+        return res.redirect(route.target);
+    }
+
     if (route) {
         route.activeConnections = (route.activeConnections || 0) + 1;
         res.on('close', () => {
