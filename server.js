@@ -2141,13 +2141,10 @@ proxyApp.use(async (req, res, next) => {
                 res.cookie('gateway_token', token, { domain: `.${domain}`, path: '/', maxAge: 86400000, secure: true, sameSite: 'lax' });
                 res.cookie('gateway_user', email, { domain: `.${domain}`, path: '/', maxAge: 86400000, secure: true, sameSite: 'lax' });
                 
-                const isKiosk = req.query.kiosk === 'true';
-                
                 return res.send(`
                     <!DOCTYPE html>
                     <html><head><script>
                         localStorage.setItem('pocketbase_auth', JSON.stringify(${JSON.stringify(pbAuth)}));
-                        ${isKiosk ? "localStorage.setItem('pilti_kiosk_mode', 'true');" : "localStorage.removeItem('pilti_kiosk_mode');"}
                         window.location.href = "${redirectUrl}";
                     </script></head><body>Redirecting to secure dashboard...</body></html>
                 `);
@@ -2221,68 +2218,56 @@ proxyApp.use(async (req, res, next) => {
 });
 
 
-proxyApp.use(async (req, res, next) => {
+proxyApp.get('/kiosk/:sysId', (req, res) => {
     const host = req.hostname || req.headers.host || '';
-    if (host.startsWith('beszel-') && req.method === 'GET' && (req.path === '/' || req.path.startsWith('/system/'))) {
-        const route = routes[host];
-        if (route) {
-            try {
-                const targetUrl = `${route.protocol || 'http'}://${route.target}${req.originalUrl}`;
-                const response = await axios.get(targetUrl, {
-                    headers: { ...req.headers, host: route.target.split(':')[0] },
-                    responseType: 'text',
-                    validateStatus: () => true
-                });
-
-                const contentType = response.headers['content-type'] || '';
-                if (contentType.includes('text/html')) {
-                    let html = response.data;
-                    const scriptToInject = `
-                    <script>
-                        (function() {
-                            if (localStorage.getItem('pilti_kiosk_mode') !== 'true') return;
-                            const observer = new MutationObserver(() => {
-                                if (!window.location.pathname.startsWith('/system/')) return;
-                                const aside = document.querySelector('aside');
-                                if (aside) aside.style.display = 'none';
-                                const mobileBtn = document.querySelector('button[aria-label="Toggle mobile menu"]');
-                                if (mobileBtn) mobileBtn.style.display = 'none';
-                                const backLinks = document.querySelectorAll('a[href="/"]');
-                                backLinks.forEach(l => l.style.display = 'none');
-                                
-                                const header = document.querySelector('header');
-                                if (header) header.style.display = 'none';
-                                
-                                const main = document.querySelector('main');
-                                if (main) { 
-                                    main.style.paddingLeft = '0'; 
-                                    main.style.marginLeft = '0';
-                                    main.style.paddingTop = '1rem'; 
-                                    main.style.marginTop = '0';
-                                }
-                            });
-                            observer.observe(document.documentElement, { childList: true, subtree: true });
-                        })();
-                    </script>`;
-                    if (html.includes('</body>')) {
-                        html = html.replace('</body>', scriptToInject + '</body>');
-                    } else {
-                        html += scriptToInject;
+    if (!host.startsWith('beszel-')) return res.status(404).send('Not Found');
+    
+    const sysId = req.params.sysId;
+    res.send(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>PiltiSmart Monitoring</title>
+            <style>
+                body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0f172a; }
+                iframe { border: none; width: 100%; height: 100%; display: block; }
+            </style>
+        </head>
+        <body>
+            <iframe id="beszelFrame" src="/system/${sysId}"></iframe>
+            <script>
+                const frame = document.getElementById('beszelFrame');
+                frame.onload = () => {
+                    try {
+                        const doc = frame.contentDocument || frame.contentWindow.document;
+                        const hideNav = () => {
+                            const aside = doc.querySelector('aside');
+                            if (aside) aside.style.display = 'none';
+                            const header = doc.querySelector('header');
+                            if (header) header.style.display = 'none';
+                            const mobileBtn = doc.querySelector('button[aria-label="Toggle mobile menu"]');
+                            if (mobileBtn) mobileBtn.style.display = 'none';
+                            const backLinks = doc.querySelectorAll('a[href="/"]');
+                            backLinks.forEach(l => l.style.display = 'none');
+                            const main = doc.querySelector('main');
+                            if (main) {
+                                main.style.paddingLeft = '0';
+                                main.style.marginLeft = '0';
+                                main.style.paddingTop = '1rem';
+                                main.style.marginTop = '0';
+                            }
+                        };
+                        hideNav();
+                        const observer = new MutationObserver(hideNav);
+                        observer.observe(doc.documentElement, { childList: true, subtree: true });
+                    } catch(e) {
+                        console.error("Kiosk Frame Error:", e);
                     }
-                    
-                    Object.entries(response.headers).forEach(([k, v]) => {
-                        if (k.toLowerCase() !== 'content-length' && k.toLowerCase() !== 'transfer-encoding') {
-                            res.setHeader(k, v);
-                        }
-                    });
-                    return res.status(response.status).send(html);
-                }
-            } catch (err) {
-                console.error('[Kiosk Injector Error]', err.message);
-            }
-        }
-    }
-    next();
+                };
+            </script>
+        </body>
+        </html>
+    `);
 });
 
 const dynamicProxy = createProxyMiddleware({

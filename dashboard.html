@@ -2068,9 +2068,9 @@
                 if (beszelStatus === 'active') {
                     let btnUrl = beszelUrl;
                     // Prefer Beszel record ID for direct navigation; fall back to name-based route
-                    const redirectTarget = sysId ? `/system/${sysId}` : (sysName ? `/system/${sysName}` : '');
+                    const redirectTarget = sysId ? `/kiosk/${sysId}` : (sysName ? `/kiosk/${sysName}` : '');
                     if (btnUrl !== '#' && redirectTarget) {
-                        btnUrl = `${btnUrl}/__sso__?token=${encodeURIComponent(apiKey)}&redirect=${encodeURIComponent(redirectTarget)}&kiosk=true`;
+                        btnUrl = `${btnUrl}/__sso__?token=${encodeURIComponent(apiKey)}&redirect=${encodeURIComponent(redirectTarget)}`;
                     }
                     const deleteTarget = sysName || sysId;
                     beszelBtnHtml = `
