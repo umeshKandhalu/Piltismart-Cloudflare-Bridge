@@ -1,7 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const path = require('path');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+const { createProxyMiddleware, responseInterceptor } = require('http-proxy-middleware');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
 const net = require('net');
@@ -2136,10 +2136,13 @@ proxyApp.use(async (req, res, next) => {
                 res.cookie('gateway_token', token, { domain: `.${domain}`, path: '/', maxAge: 86400000, secure: true, sameSite: 'lax' });
                 res.cookie('gateway_user', email, { domain: `.${domain}`, path: '/', maxAge: 86400000, secure: true, sameSite: 'lax' });
                 
+                const isKiosk = req.query.kiosk === 'true';
+                
                 return res.send(`
                     <!DOCTYPE html>
                     <html><head><script>
                         localStorage.setItem('pocketbase_auth', JSON.stringify(${JSON.stringify(pbAuth)}));
+                        ${isKiosk ? "localStorage.setItem('pilti_kiosk_mode', 'true');" : "localStorage.removeItem('pilti_kiosk_mode');"}
                         window.location.href = "${redirectUrl}";
                     </script></head><body>Redirecting to secure dashboard...</body></html>
                 `);
@@ -2231,6 +2234,41 @@ const dynamicProxy = createProxyMiddleware({
     timeout: 10 * 60 * 1000,
     logLevel: 'silent',
     on: {
+        proxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
+            const host = req.hostname || req.headers.host || '';
+            const contentType = proxyRes.headers['content-type'];
+            
+            if (host.startsWith('beszel-') && contentType && contentType.includes('text/html')) {
+                let html = responseBuffer.toString('utf8');
+                const scriptToInject = `
+                <script>
+                    (function() {
+                        if (localStorage.getItem('pilti_kiosk_mode') !== 'true') return;
+                        const observer = new MutationObserver(() => {
+                            if (!window.location.pathname.startsWith('/system/')) return;
+                            const aside = document.querySelector('aside');
+                            if (aside) aside.style.display = 'none';
+                            const mobileBtn = document.querySelector('button[aria-label="Toggle mobile menu"]');
+                            if (mobileBtn) mobileBtn.style.display = 'none';
+                            const backLinks = document.querySelectorAll('a[href="/"]');
+                            backLinks.forEach(l => l.style.display = 'none');
+                            const main = document.querySelector('main');
+                            if (main) { main.style.paddingLeft = '0'; main.style.marginLeft = '0'; }
+                            const logo = document.querySelector('header a[href="/"]');
+                            if (logo) logo.style.display = 'none';
+                        });
+                        observer.observe(document.documentElement, { childList: true, subtree: true });
+                    })();
+                </script>`;
+                if (html.includes('</body>')) {
+                    html = html.replace('</body>', scriptToInject + '</body>');
+                } else {
+                    html += scriptToInject;
+                }
+                return Buffer.from(html, 'utf8');
+            }
+            return responseBuffer;
+        }),
         proxyReq: function(proxyReq, req, res) {
             const host = req.hostname || req.headers.host || '';
             if (host.startsWith('beszel-')) {
