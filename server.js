@@ -2227,7 +2227,7 @@ proxyApp.use(async (req, res, next) => {
         const route = routes[host];
         if (route) {
             try {
-                const targetUrl = \`\${route.protocol || 'http'}://\${route.target}\${req.originalUrl}\`;
+                const targetUrl = `${route.protocol || 'http'}://${route.target}${req.originalUrl}`;
                 const response = await axios.get(targetUrl, {
                     headers: { ...req.headers, host: route.target.split(':')[0] },
                     responseType: 'text',
@@ -2237,7 +2237,7 @@ proxyApp.use(async (req, res, next) => {
                 const contentType = response.headers['content-type'] || '';
                 if (contentType.includes('text/html')) {
                     let html = response.data;
-                    const scriptToInject = \`
+                    const scriptToInject = `
                     <script>
                         (function() {
                             if (localStorage.getItem('pilti_kiosk_mode') !== 'true') return;
@@ -2263,7 +2263,7 @@ proxyApp.use(async (req, res, next) => {
                             });
                             observer.observe(document.documentElement, { childList: true, subtree: true });
                         })();
-                    </script>\`;
+                    </script>`;
                     if (html.includes('</body>')) {
                         html = html.replace('</body>', scriptToInject + '</body>');
                     } else {
