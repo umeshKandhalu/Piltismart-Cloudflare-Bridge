@@ -680,6 +680,11 @@ setInterval(async () => {
         const entries = Object.entries(routes);
         
         await Promise.all(entries.map(async ([hostname, data]) => {
+            if (data.mode === 'redirect') {
+                data.status = 'online';
+                data.latency = 0;
+                return;
+            }
             const [host, port] = data.target.split(':');
             if (host && port) {
                 const startPing = Date.now();
@@ -2215,30 +2220,23 @@ proxyApp.use(async (req, res, next) => {
     next();
 });
 
-const dynamicProxy = createProxyMiddleware({
+const beszelHtmlProxy = createProxyMiddleware({
     target: 'http://localhost',
     router: function(req) {
         const host = req.hostname || req.headers.host;
         const route = routes[host];
         if (!route) return 'http://localhost';
-        if (ttydInstances[host]) {
-            return `http://localhost:${ttydInstances[host].port}`;
-        }
-        const protocol = route.protocol || 'http';
-        return `${protocol}://${route.target}`;
+        return `${route.protocol || 'http'}://${route.target}`;
     },
     changeOrigin: true,
-    ws: true,
-    secure: false, // Bypass self-signed SSL cert errors for Proxmox/HTTPS backends
-    proxyTimeout: 10 * 60 * 1000, // 10 minutes — needed for Ollama/LLM streaming
+    secure: false,
+    proxyTimeout: 10 * 60 * 1000,
     timeout: 10 * 60 * 1000,
     logLevel: 'silent',
     on: {
         proxyRes: responseInterceptor(async (responseBuffer, proxyRes, req, res) => {
-            const host = req.hostname || req.headers.host || '';
             const contentType = proxyRes.headers['content-type'];
-            
-            if (host.startsWith('beszel-') && contentType && contentType.includes('text/html')) {
+            if (contentType && contentType.includes('text/html')) {
                 let html = responseBuffer.toString('utf8');
                 const scriptToInject = `
                 <script>
@@ -2276,6 +2274,65 @@ const dynamicProxy = createProxyMiddleware({
             }
             return responseBuffer;
         }),
+        proxyReq: function(proxyReq, req, res) {
+            const host = req.hostname || req.headers.host || '';
+            const cookieHeader = req.headers.cookie;
+            let token;
+            if (cookieHeader) {
+                const cookies = cookieHeader.split(';').reduce((acc, cookie) => {
+                    const [key, val] = cookie.split('=').map(c => c.trim());
+                    acc[key] = decodeURIComponent(val);
+                    return acc;
+                }, {});
+                token = cookies['gateway_token'];
+            }
+            let email;
+            if (token) {
+                if (sessions[token]) email = sessions[token].user;
+                else if (token.includes(':')) {
+                    const [u, sig] = token.split(':');
+                    const expectedSig = crypto.createHmac('sha256', GATEWAY_API_KEY).update(u).digest('hex');
+                    if (sig === expectedSig) {
+                        email = u;
+                        sessions[token] = { user: u, expires: Date.now() + 24 * 60 * 60 * 1000 };
+                    }
+                }
+            }
+            if (email) proxyReq.setHeader('X-Webauth-User', email);
+        }
+    }
+});
+
+proxyApp.use(async (req, res, next) => {
+    const host = req.hostname || req.headers.host || '';
+    if (host.startsWith('beszel-')) {
+        // Only intercept HTML pages, explicitly ignoring API, SSE, and assets to prevent ERR_HTTP_HEADERS_SENT
+        if (req.method === 'GET' && !req.path.startsWith('/api/') && !req.path.startsWith('/_/') && !req.path.includes('.')) {
+            return beszelHtmlProxy(req, res, next);
+        }
+    }
+    next();
+});
+
+const dynamicProxy = createProxyMiddleware({
+    target: 'http://localhost',
+    router: function(req) {
+        const host = req.hostname || req.headers.host;
+        const route = routes[host];
+        if (!route) return 'http://localhost';
+        if (ttydInstances[host]) {
+            return `http://localhost:${ttydInstances[host].port}`;
+        }
+        const protocol = route.protocol || 'http';
+        return `${protocol}://${route.target}`;
+    },
+    changeOrigin: true,
+    ws: true,
+    secure: false, // Bypass self-signed SSL cert errors for Proxmox/HTTPS backends
+    proxyTimeout: 10 * 60 * 1000, // 10 minutes — needed for Ollama/LLM streaming
+    timeout: 10 * 60 * 1000,
+    logLevel: 'silent',
+    on: {
         proxyReq: function(proxyReq, req, res) {
             const host = req.hostname || req.headers.host || '';
             if (host.startsWith('beszel-')) {
