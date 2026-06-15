@@ -2252,10 +2252,17 @@ const dynamicProxy = createProxyMiddleware({
                             if (mobileBtn) mobileBtn.style.display = 'none';
                             const backLinks = document.querySelectorAll('a[href="/"]');
                             backLinks.forEach(l => l.style.display = 'none');
+                            
+                            const header = document.querySelector('header');
+                            if (header) header.style.display = 'none';
+                            
                             const main = document.querySelector('main');
-                            if (main) { main.style.paddingLeft = '0'; main.style.marginLeft = '0'; }
-                            const logo = document.querySelector('header a[href="/"]');
-                            if (logo) logo.style.display = 'none';
+                            if (main) { 
+                                main.style.paddingLeft = '0'; 
+                                main.style.marginLeft = '0';
+                                main.style.paddingTop = '1rem'; 
+                                main.style.marginTop = '0';
+                            }
                         });
                         observer.observe(document.documentElement, { childList: true, subtree: true });
                     })();
