@@ -1721,7 +1721,7 @@ adminApp.post('/services/auto-discover', async (req, res) => {
 
         sendMsg({ log: `Found ${allVms.length} running VMs/LXCs to scan. Beginning deep scan...` });
 
-        let portsToScan = [80, 443, 3000, 5000, 8000, 8080, 8090, 8123, 11434, 22, 3306, 5432];
+        let portsToScan = [80, 81, 443, 1880, 5000, 8000, 8080, 8090, 9090, 8123, 11434, 22, 3306, 5432];
         if (req.body && Array.isArray(req.body.ports) && req.body.ports.length > 0) {
             portsToScan = req.body.ports.filter(p => Number.isInteger(p) && p > 0 && p <= 65535);
         }
