@@ -2221,6 +2221,70 @@ proxyApp.use(async (req, res, next) => {
 });
 
 
+proxyApp.use(async (req, res, next) => {
+    const host = req.hostname || req.headers.host || '';
+    if (host.startsWith('beszel-') && req.method === 'GET' && (req.path === '/' || req.path.startsWith('/system/'))) {
+        const route = routes[host];
+        if (route) {
+            try {
+                const targetUrl = \`\${route.protocol || 'http'}://\${route.target}\${req.originalUrl}\`;
+                const response = await axios.get(targetUrl, {
+                    headers: { ...req.headers, host: route.target.split(':')[0] },
+                    responseType: 'text',
+                    validateStatus: () => true
+                });
+
+                const contentType = response.headers['content-type'] || '';
+                if (contentType.includes('text/html')) {
+                    let html = response.data;
+                    const scriptToInject = \`
+                    <script>
+                        (function() {
+                            if (localStorage.getItem('pilti_kiosk_mode') !== 'true') return;
+                            const observer = new MutationObserver(() => {
+                                if (!window.location.pathname.startsWith('/system/')) return;
+                                const aside = document.querySelector('aside');
+                                if (aside) aside.style.display = 'none';
+                                const mobileBtn = document.querySelector('button[aria-label="Toggle mobile menu"]');
+                                if (mobileBtn) mobileBtn.style.display = 'none';
+                                const backLinks = document.querySelectorAll('a[href="/"]');
+                                backLinks.forEach(l => l.style.display = 'none');
+                                
+                                const header = document.querySelector('header');
+                                if (header) header.style.display = 'none';
+                                
+                                const main = document.querySelector('main');
+                                if (main) { 
+                                    main.style.paddingLeft = '0'; 
+                                    main.style.marginLeft = '0';
+                                    main.style.paddingTop = '1rem'; 
+                                    main.style.marginTop = '0';
+                                }
+                            });
+                            observer.observe(document.documentElement, { childList: true, subtree: true });
+                        })();
+                    </script>\`;
+                    if (html.includes('</body>')) {
+                        html = html.replace('</body>', scriptToInject + '</body>');
+                    } else {
+                        html += scriptToInject;
+                    }
+                    
+                    Object.entries(response.headers).forEach(([k, v]) => {
+                        if (k.toLowerCase() !== 'content-length' && k.toLowerCase() !== 'transfer-encoding') {
+                            res.setHeader(k, v);
+                        }
+                    });
+                    return res.status(response.status).send(html);
+                }
+            } catch (err) {
+                console.error('[Kiosk Injector Error]', err.message);
+            }
+        }
+    }
+    next();
+});
+
 const dynamicProxy = createProxyMiddleware({
     target: 'http://localhost',
     router: function(req) {
