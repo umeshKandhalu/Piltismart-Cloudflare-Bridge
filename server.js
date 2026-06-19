@@ -747,7 +747,7 @@ adminApp.use(express.json());
 
 adminApp.use((req, res, next) => {
     // Allow public access to docs, dashboard UI, login, logout and favicon
-    if (req.path === '/' || req.path.startsWith('/docs') || req.path.startsWith('/api-docs') || req.path.startsWith('/dashboard') || req.path === '/login' || req.path === '/logout' || req.path === '/favicon.ico') {
+    if (req.path === '/' || req.path.startsWith('/docs') || req.path.startsWith('/api-docs') || req.path.startsWith('/dashboard') || req.path.startsWith('/mesh') || req.path === '/login' || req.path === '/logout' || req.path === '/favicon.ico') {
         return next();
     }
     const apiKey = req.headers['x-api-key'] || req.query.api_key;
@@ -2027,6 +2027,111 @@ adminApp.get('/login', (req, res) => {
 adminApp.get('/dashboard', (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.sendFile(path.join(__dirname, 'dashboard.html'));
+});
+
+adminApp.get('/mesh', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.sendFile(path.join(__dirname, 'mesh.html'));
+});
+
+const meshNodes = [
+    // Gateways
+    { id: 'gold', name: 'Gold GW', ip: '10.50.50.3', region: 'dublin', type: 'gateway' },
+    { id: 'pink', name: 'Pink GW', ip: '10.80.80.2', region: 'dublin', type: 'gateway' },
+    { id: 'silver', name: 'Silver GW', ip: '10.100.100.2', region: 'dublin', type: 'gateway' },
+    { id: 'white', name: 'White GW', ip: '10.60.60.4', region: 'madurai', type: 'gateway' },
+    { id: 'pluto', name: 'Pluto GW', ip: '10.90.90.3', region: 'madurai', type: 'gateway' },
+    { id: 'purple', name: 'Purple GW', ip: '10.70.70.3', region: 'madurai', type: 'gateway' },
+    
+    // Hosts (adding physical 192.168 IPs)
+    { id: 'gold-host', name: 'Gold Host', ip: '10.50.50.1', physicalIp: '192.168.0.100', region: 'dublin', type: 'host' },
+    { id: 'pink-host', name: 'Pink Host', ip: '10.80.80.1', physicalIp: '192.168.0.241', region: 'dublin', type: 'host' },
+    { id: 'silver-host', name: 'Silver Host', ip: '10.100.100.1', physicalIp: '192.168.0.172', region: 'dublin', type: 'host' },
+    
+    // Assuming Madurai uses 192.168.1.x based on user context
+    { id: 'white-host', name: 'White Host', ip: '10.60.60.1', physicalIp: '192.168.1.18', region: 'madurai', type: 'host' },
+    { id: 'pluto-host', name: 'Pluto Host', ip: '10.90.90.1', physicalIp: '192.168.1.30', region: 'madurai', type: 'host' },
+    { id: 'purple-host', name: 'Purple Host', ip: '10.70.70.1', physicalIp: '192.168.1.55', region: 'madurai', type: 'host' }
+];
+
+/**
+ * @swagger
+ * /api/mesh-status:
+ *   get:
+ *     summary: Get live latency and status for all Tailscale SDN nodes
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: Array of node statuses
+ */
+adminApp.get('/api/mesh-status', async (req, res) => {
+    let clusterVms = [];
+    try {
+        await getPveTicket();
+        const headers = { 'Cookie': pveAuthCookie, 'CSRFPreventionToken': pveCsrfToken };
+        
+        // Fetch Dublin VMs
+        const dublinRes = await pveAxios.get('/api2/json/cluster/resources?type=vm', { headers }).catch(e => ({data:{data:[]}}));
+        let dublinVms = dublinRes.data && dublinRes.data.data ? dublinRes.data.data : [];
+
+        // Fetch Madurai VMs from standalone nodes (White, Pluto, Purple over Tailscale/SDN)
+        let maduraiVms = [];
+        const maduraiIps = ['10.60.60.1', '10.90.90.1', '10.70.70.1'];
+        for (const mIp of maduraiIps) {
+            try {
+                const pveAxiosMadurai = require('axios').create({
+                    baseURL: `https://${mIp}:8006`,
+                    httpsAgent: new require('https').Agent({ rejectUnauthorized: false }),
+                    timeout: 5000
+                });
+                const authRes = await pveAxiosMadurai.post('/api2/json/access/ticket', {username: 'root@pam', password: PVE_PASSWORD});
+                const mTicket = authRes.data.data.ticket;
+                const mCsrf = authRes.data.data.CSRFPreventionToken;
+                const mHeaders = { 'Cookie': 'PVEAuthCookie=' + mTicket, 'CSRFPreventionToken': mCsrf };
+                const mRes = await pveAxiosMadurai.get('/api2/json/cluster/resources?type=vm', { headers: mHeaders });
+                if (mRes.data && mRes.data.data) {
+                    // Filter specifically for this node just in case they return partial cluster data
+                    maduraiVms.push(...mRes.data.data);
+                }
+            } catch(merr) {
+                console.error(`[Mesh Status] Failed to fetch VMs from Madurai Node ${mIp}:`, merr.message);
+            }
+        }
+
+        const allVmsRaw = [...dublinVms, ...maduraiVms];
+
+        clusterVms = allVmsRaw.map(v => ({
+            id: String(v.vmid),
+            name: v.name,
+            node: v.node,
+            status: v.status, // 'running' or 'stopped'
+            type: v.type, // 'qemu' or 'lxc'
+            isTemplate: v.template === 1 // True if this is a template
+        }));
+    } catch(err) {
+        console.error("[Mesh Status] Failed to fetch cluster VMs:", err.message);
+    }
+
+    const statusData = await Promise.all(meshNodes.map(async (node) => {
+        const startPing = Date.now();
+        const currentStatus = await pingTcp(node.ip, 22); 
+        const latencyMs = currentStatus === 'online' ? Date.now() - startPing : -1;
+        
+        let nodeVms = [];
+        if (node.type === 'host') {
+            const pveNodeName = node.id.replace('-host', '').toLowerCase();
+            nodeVms = clusterVms.filter(v => v.node && v.node.toLowerCase() === pveNodeName);
+        }
+
+        return {
+            ...node,
+            status: currentStatus,
+            latency: latencyMs,
+            vms: nodeVms
+        };
+    }));
+    res.json(statusData);
 });
 
 proxyApp.post('/__auth__', express.urlencoded({ extended: true }), express.json(), async (req, res) => {

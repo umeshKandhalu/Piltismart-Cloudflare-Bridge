@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PiltiSmart - Network Topology</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #07090f;
+            --glass-bg: rgba(20, 25, 40, 0.6);
+            --glass-border: rgba(255, 255, 255, 0.08);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --dublin-color: #3b82f6; /* Blue */
+            --madurai-color: #8b5cf6; /* Purple */
+            --ts-color: #1e90ff; /* Tailscale Blue */
+            --online-color: #10b981; /* Green */
+            --offline-color: #ef4444; /* Red */
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 85% 50%, rgba(139, 92, 246, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 50% 50%, rgba(30, 144, 255, 0.1) 0%, transparent 30%);
+            color: var(--text-main);
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        header {
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--glass-border);
+            backdrop-filter: blur(20px);
+            z-index: 10;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .brand-icon {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, var(--dublin-color), var(--madurai-color));
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(139, 92, 246, 0.4);
+        }
+
+        .btn-back {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+            border: 1px solid var(--glass-border);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+        }
+
+        .btn-back:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .mesh-container {
+            flex: 1;
+            position: relative;
+            display: flex;
+            padding: 1rem;
+            align-items: center;
+            justify-content: space-around;
+        }
+
+        .region {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .region-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(255,255,255,0.2);
+        }
+
+        .dublin-title { color: var(--dublin-color); }
+        .madurai-title { color: var(--madurai-color); }
+
+        .tailscale-center {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 0 20px;
+            z-index: 5;
+            position: relative;
+        }
+        
+        .cloud-icon {
+            font-size: 4.5rem;
+            filter: drop-shadow(0 0 20px var(--ts-color));
+            animation: float 4s ease-in-out infinite;
+        }
+        
+        .cloud-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--ts-color);
+            margin-top: 15px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            text-shadow: 0 0 10px rgba(30, 144, 255, 0.4);
+        }
+        
+        .cloud-subtitle {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+            font-family: monospace;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .node-group {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            max-width: 900px;
+        }
+
+        .host-box {
+            background: var(--glass-bg);
+            border: 1px solid var(--glass-border);
+            backdrop-filter: blur(15px);
+            padding: 15px;
+            border-radius: 12px;
+            width: 200px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+            transition: transform 0.3s, box-shadow 0.3s;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            position: relative;
+            z-index: 2;
+        }
+
+        .host-box:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.4);
+        }
+
+        .host-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding-bottom: 5px;
+        }
+
+        .connection-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: -4px 0;
+            opacity: 0.8;
+        }
+        .connection-label .line {
+            flex: 1;
+            height: 0;
+            border-bottom: 1px dashed var(--text-muted);
+            opacity: 0.5;
+        }
+        .connection-label .text {
+            font-size: 0.6rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .gateway-box {
+            background: rgba(0,0,0,0.5);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            position: relative;
+            box-shadow: inset 0 0 15px rgba(30, 144, 255, 0.1);
+        }
+
+        .node-icon {
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0,0,0,0.4);
+            border: 2px solid var(--glass-border);
+            flex-shrink: 0;
+        }
+
+        .host-header .node-icon {
+            width: 36px; height: 36px;
+            border-color: var(--madurai-color);
+            font-size: 1rem;
+        }
+
+        .gateway-box .node-icon {
+            width: 32px; height: 32px;
+            border-color: var(--ts-color);
+            font-size: 0.9rem;
+        }
+
+        .details-col {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .node-name {
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .node-ip {
+            font-family: monospace;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 8px;
+            border-radius: 15px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            background: rgba(255,255,255,0.05);
+            text-transform: uppercase;
+            margin-top: 2px;
+        }
+
+        .status-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+        }
+
+        .online { color: var(--online-color); }
+        .online .status-dot { 
+            background: var(--online-color); 
+            box-shadow: 0 0 8px var(--online-color);
+            animation: pulse 2s infinite;
+        }
+        
+        .offline { color: var(--offline-color); }
+        .offline .status-dot { 
+            background: var(--offline-color); 
+        }
+
+        .latency {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+        }
+
+        /* VM Dots */
+        .vm-dots-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255,255,255,0.05);
+            min-height: 10px;
+        }
+        .vm-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            cursor: help;
+            transition: transform 0.2s;
+            background: #666; /* Ensures legend shapes are visible */
+        }
+        .vm-dot.lxc { border-radius: 0; }
+        .vm-dot.vm { border-radius: 50%; }
+        .vm-dot.template { 
+            border-radius: 0;
+            clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+            background: #aaa !important;
+            opacity: 0.8 !important;
+            box-shadow: none !important;
+        }
+        .vm-dot.running { background: var(--online-color); box-shadow: 0 0 4px var(--online-color); }
+        .vm-dot.stopped { background: var(--offline-color); opacity: 0.5; }
+        .vm-dot:hover { transform: scale(1.5); }
+
+        /* SVG Canvas for Lines */
+        #connection-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .mesh-line {
+            stroke: var(--ts-color);
+            stroke-width: 1.5;
+            fill: none;
+            transition: stroke 0.5s;
+        }
+
+        .mesh-line.active {
+            opacity: 0.4;
+        }
+
+        .mesh-line.broken {
+            stroke: var(--offline-color);
+            stroke-dasharray: 4, 4;
+            opacity: 0.6;
+        }
+
+        .packet {
+            fill: var(--ts-color);
+            filter: drop-shadow(0 0 5px var(--ts-color));
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.5); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .loader {
+            display: inline-block;
+            width: 30px; height: 30px;
+            border: 2px solid rgba(255,255,255,0.1);
+            border-radius: 50%;
+            border-top-color: var(--ts-color);
+            animation: spin 1s ease-in-out infinite;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 100;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <div class="brand-icon"></div>
+            Tailscale Mesh Topology
+        </div>
+        <a href="/dashboard" class="btn-back">← Back to Dashboard</a>
+    </header>
+
+    <div id="loader" class="loader"></div>
+
+    <div class="mesh-container" id="mesh-container" style="opacity: 0; transition: opacity 0.5s;">
+        <svg id="connection-canvas"></svg>
+
+        <div class="region">
+            <div class="region-title dublin-title">Dublin Datacenter</div>
+            <div class="node-group" id="dublin-nodes"></div>
+        </div>
+
+        <div class="tailscale-center">
+            <div class="cloud-icon">☁️</div>
+            <div class="cloud-title">Tailscale Mesh</div>
+            <div class="cloud-subtitle">SDN / 100.x.x.x</div>
+        </div>
+
+        <div class="region">
+            <div class="region-title madurai-title">Madurai Datacenter</div>
+            <div class="node-group" id="madurai-nodes"></div>
+        </div>
+    </div>
+
+    <div class="routing-table-container" style="max-width: 1100px; margin: 2rem auto; padding: 1rem; opacity: 0; transition: opacity 0.5s;" id="routing-table-container">
+        <h3 style="color: var(--ts-color); border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem; margin-bottom: 1rem; font-weight: 500;">Network Routing Diagnostics</h3>
+        <table style="width: 100%; border-collapse: collapse; background: var(--glass-bg); border-radius: 8px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+            <thead>
+                <tr style="background: rgba(0,0,0,0.4); text-align: left; font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); letter-spacing: 1px;">
+                    <th style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">Datacenter</th>
+                    <th style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">Physical Node</th>
+                    <th style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">Physical LAN IP</th>
+                    <th style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">SDN Gateway IP</th>
+                    <th style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">Physical ➔ SDN Bridge</th>
+                    <th style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">SDN ➔ Physical Route</th>
+                </tr>
+            </thead>
+            <tbody id="routing-table-body" style="font-size: 0.95rem;">
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        let nodesData = [];
+        const dublinContainer = document.getElementById('dublin-nodes');
+        const maduraiContainer = document.getElementById('madurai-nodes');
+        const svgCanvas = document.getElementById('connection-canvas');
+        
+        async function fetchMeshStatus() {
+            try {
+                const apiKey = localStorage.getItem('gateway_api_key');
+                if (!apiKey) {
+                    throw new Error("No API key found. Please log in.");
+                }
+                const response = await fetch(`/api/mesh-status?api_key=${encodeURIComponent(apiKey)}&_t=${Date.now()}`);
+                
+                if (response.status === 401) {
+                    console.error("Authentication required");
+                    document.body.innerHTML += '<div style="position:absolute;top:50%;width:100%;text-align:center;color:red;z-index:9999;">Authentication Failed. Please log in through the dashboard again.</div>';
+                    throw new Error("Unauthorized");
+                }
+                
+                return await response.json();
+            } catch(e) {
+                console.error("Fetch failed", e);
+                return [];
+            }
+        }
+
+        function createHostCardHtml(host, gw) {
+            const hOnline = host.status === 'online';
+            const gOnline = gw ? gw.status === 'online' : false;
+            
+            const hLatency = hOnline && host.latency >= 0 ? `<div class="latency">${host.latency} ms</div>` : '';
+            const gLatency = gOnline && gw.latency >= 0 ? `<div class="latency">${gw.latency} ms</div>` : '';
+            
+            let lxcCount = 0;
+            let vmCount = 0;
+            let templateCount = 0;
+
+            let vmsHtml = '';
+            if (host.vms && host.vms.length > 0) {
+                const sortedVms = [...host.vms].sort((a,b) => a.status === 'running' ? -1 : 1);
+                vmsHtml = '<div class="vm-dots-container">';
+                sortedVms.forEach(vm => {
+                    let dotClass = vm.type;
+                    let typeLabel = '';
+                    if (vm.isTemplate) {
+                        dotClass = 'template';
+                        typeLabel = 'Template';
+                        templateCount++;
+                    } else if (vm.type === 'lxc') {
+                        dotClass = 'lxc';
+                        typeLabel = 'LXC';
+                        lxcCount++;
+                    } else {
+                        dotClass = 'vm';
+                        typeLabel = 'VM';
+                        vmCount++;
+                    }
+                    vmsHtml += `<div class="vm-dot ${dotClass} ${vm.status}" title="[${typeLabel}] ${vm.id}: ${vm.name} (${vm.status})"></div>`;
+                });
+                vmsHtml += '</div>';
+                
+                vmsHtml += `
+                    <div style="font-size: 0.6rem; color: #aaa; display: flex; justify-content: center; gap: 8px; margin-top: -5px; background: rgba(0,0,0,0.2); padding: 4px; border-radius: 4px;">
+                        <span style="display:flex; align-items:center; gap:3px;"><span class="vm-dot lxc" style="display:inline-block; width:6px; height:6px;"></span> ${lxcCount}</span>
+                        <span style="display:flex; align-items:center; gap:3px;"><span class="vm-dot vm" style="display:inline-block; width:6px; height:6px;"></span> ${vmCount}</span>
+                        <span style="display:flex; align-items:center; gap:3px;"><span class="vm-dot template" style="display:inline-block; width:6px; height:6px;"></span> ${templateCount}</span>
+                    </div>
+                `;
+            } else {
+                vmsHtml = '<div class="vm-dots-container" style="justify-content:center;color:#666;font-size:0.7rem;">No VMs Found</div>';
+            }
+
+            let gwHtml = '';
+            if (gw) {
+                gwHtml = `
+                    <div class="connection-label">
+                        <span class="line"></span>
+                        <span class="text">⇅ Routed via</span>
+                        <span class="line"></span>
+                    </div>
+
+                    <div class="gateway-box" id="node-${gw.id}">
+                        <div class="node-icon">🌐</div>
+                        <div class="details-col">
+                            <div class="node-name">${gw.name}</div>
+                            <div class="node-ip">${gw.ip}</div>
+                            <div class="status-badge ${gw.status}">
+                                <div class="status-dot"></div>
+                                ${gw.status}
+                            </div>
+                            ${gLatency}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            return `
+                <div class="host-box" id="node-${host.id}">
+                    <div class="host-header">
+                        <div class="node-icon">🖥️</div>
+                        <div class="details-col">
+                            <div class="node-name">${host.name} (Physical)</div>
+                            <div class="node-ip">LAN: ${host.physicalIp || 'Unknown'}</div>
+                            <div class="status-badge ${host.status}">
+                                <div class="status-dot"></div>
+                                ${host.status}
+                            </div>
+                            ${hLatency}
+                        </div>
+                    </div>
+
+                    <div class="connection-label" title="Proxmox Virtual Network">
+                        <span class="line"></span>
+                        <span class="text">SDN: ${host.ip}</span>
+                        <span class="line"></span>
+                    </div>
+
+                    ${vmsHtml}
+
+                    ${gwHtml}
+                </div>
+            `;
+        }
+
+        function renderNodes() {
+            dublinContainer.innerHTML = '';
+            maduraiContainer.innerHTML = '';
+            
+            const hosts = nodesData.filter(n => n.type === 'host');
+            const gateways = nodesData.filter(n => n.type === 'gateway');
+            
+            hosts.forEach(hostNode => {
+                const gwId = hostNode.id.replace('-host', '');
+                const gwNode = gateways.find(g => g.id === gwId);
+                
+                const html = createHostCardHtml(hostNode, gwNode);
+                if (hostNode.region === 'dublin') {
+                    dublinContainer.innerHTML += html;
+                } else {
+                    maduraiContainer.innerHTML += html;
+                }
+            });
+
+            renderRoutingTable(hosts, gateways);
+        }
+
+        function renderRoutingTable(hosts, gateways) {
+            const tableBody = document.getElementById('routing-table-body');
+            tableBody.innerHTML = '';
+            
+            hosts.forEach(hostNode => {
+                const gwId = hostNode.id.replace('-host', '');
+                const gwNode = gateways.find(g => g.id === gwId);
+                
+                const regionStr = hostNode.region.charAt(0).toUpperCase() + hostNode.region.slice(1);
+                
+                const hostStatus = hostNode.status === 'online';
+                const gwStatus = gwNode ? gwNode.status === 'online' : false;
+                
+                // Connection Logic: 
+                // If Gateway is online, it means SDN can reach outside/physical layer (because Gateway acts as router)
+                const sdnToLan = gwStatus ? '<span style="color:var(--online-color);">● ACTIVE</span>' : '<span style="color:var(--offline-color);">● OFFLINE</span>';
+                
+                // If Host is online, it means the Physical host is reachable and its API is returning data, so LAN is talking to SDN successfully
+                const lanToSdn = hostStatus ? '<span style="color:var(--online-color);">● ACTIVE</span>' : '<span style="color:var(--offline-color);">● OFFLINE</span>';
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">${regionStr}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">${hostNode.name}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-family: monospace;">${hostNode.physicalIp || 'Unknown'}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); font-family: monospace;">${gwNode ? gwNode.ip : 'Missing'}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">${lanToSdn}</td>
+                    <td style="padding: 15px; border-bottom: 1px solid rgba(255,255,255,0.05);">${sdnToLan}</td>
+                `;
+                tableBody.appendChild(tr);
+            });
+        }
+
+        function drawConnections() {
+            svgCanvas.innerHTML = '';
+            const svgRect = svgCanvas.getBoundingClientRect();
+            
+            const gateways = document.querySelectorAll('.gateway-box');
+            const cloudNode = document.querySelector('.cloud-icon');
+            if(!cloudNode || gateways.length === 0) return;
+
+            const cloudRect = cloudNode.getBoundingClientRect();
+            const cx = cloudRect.left + cloudRect.width / 2 - svgRect.left;
+            const cy = cloudRect.top + cloudRect.height / 2 - svgRect.top;
+            
+            gateways.forEach(gNode => {
+                const gRect = gNode.getBoundingClientRect();
+                
+                // Determine which side of the gateway is closest to the cloud
+                let gx = gRect.right < cloudRect.left ? gRect.right : gRect.left;
+                let gy = gRect.top + gRect.height / 2;
+                
+                gx -= svgRect.left;
+                gy -= svgRect.top;
+                
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                const ctrlX = (gx + cx) / 2;
+                
+                const dPath = `M ${gx} ${gy} C ${ctrlX} ${gy}, ${ctrlX} ${cy}, ${cx} ${cy}`;
+                path.setAttribute('d', dPath);
+                
+                const gStatus = gNode.querySelector('.status-badge').classList.contains('online');
+                
+                if (gStatus) {
+                    path.setAttribute('class', 'mesh-line active');
+                    
+                    // Outbound Packet
+                    const circleOut = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    circleOut.setAttribute('r', '2.5');
+                    circleOut.setAttribute('class', 'packet');
+                    
+                    const animOut = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
+                    animOut.setAttribute('dur', (1.5 + Math.random() * 2) + 's');
+                    animOut.setAttribute('repeatCount', 'indefinite');
+                    animOut.setAttribute('path', dPath);
+                    circleOut.appendChild(animOut);
+                    svgCanvas.appendChild(circleOut);
+
+                    // Inbound Packet
+                    if(Math.random() > 0.3) {
+                        const circleIn = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                        circleIn.setAttribute('r', '2.5');
+                        circleIn.setAttribute('class', 'packet');
+                        
+                        const animIn = document.createElementNS('http://www.w3.org/2000/svg', 'animateMotion');
+                        animIn.setAttribute('dur', (1.5 + Math.random() * 2) + 's');
+                        animIn.setAttribute('repeatCount', 'indefinite');
+                        animIn.setAttribute('path', dPath);
+                        animIn.setAttribute('keyPoints', '1;0');
+                        animIn.setAttribute('keyTimes', '0;1');
+                        animIn.setAttribute('calcMode', 'linear');
+                        circleIn.appendChild(animIn);
+                        svgCanvas.appendChild(circleIn);
+                    }
+                    
+                } else {
+                    path.setAttribute('class', 'mesh-line broken');
+                }
+                
+                svgCanvas.insertBefore(path, svgCanvas.firstChild);
+            });
+        }
+
+        async function init() {
+            nodesData = await fetchMeshStatus();
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('mesh-container').style.opacity = '1';
+            document.getElementById('routing-table-container').style.opacity = '1';
+            
+            if(nodesData.length > 0) {
+                renderNodes();
+                setTimeout(drawConnections, 300);
+            }
+        }
+
+        window.addEventListener('resize', () => {
+            if (nodesData.length > 0) drawConnections();
+        });
+
+        setInterval(async () => {
+            nodesData = await fetchMeshStatus();
+            renderNodes();
+            drawConnections();
+        }, 15000);
+
+        init();
+    </script>
+</body>
+</html>
