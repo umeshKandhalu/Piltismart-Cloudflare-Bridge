@@ -10,6 +10,7 @@ This document serves as a persistent reference for the physical locations of the
 | **Pink** | Dublin | `pinkvnet` | `10.80.80.0/24` | 399 | `10.80.80.2` | `100.118.72.62` |
 | **Gold** | Dublin | `goldvnet` | `10.50.50.0/24` | 999 | `10.50.50.3` | `100.88.139.76` |
 | **Silver** | Dublin | `silvervn` | `10.100.100.0/24` | 499 | `10.100.100.2` | `100.72.150.29` |
+| **PBS** | Madurai | `Physical` | `192.168.1.38` | N/A | N/A | N/A |
 
 ## Site-to-Site VPN Topology
 
