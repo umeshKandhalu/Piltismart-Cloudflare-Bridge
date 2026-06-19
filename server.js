@@ -2068,38 +2068,28 @@ const meshNodes = [
 adminApp.get('/api/mesh-status', async (req, res) => {
     let clusterVms = [];
     try {
-        await getPveTicket();
-        const headers = { 'Cookie': pveAuthCookie, 'CSRFPreventionToken': pveCsrfToken };
+        const meshHostIps = ['10.50.50.1', '10.60.60.1', '10.90.90.1', '10.70.70.1'];
+        let allVmsRaw = [];
         
-        // Fetch Dublin VMs
-        const dublinRes = await pveAxios.get('/api2/json/cluster/resources?type=vm', { headers }).catch(e => ({data:{data:[]}}));
-        let dublinVms = dublinRes.data && dublinRes.data.data ? dublinRes.data.data : [];
-
-        // Fetch Madurai VMs from standalone nodes (White, Pluto, Purple over Tailscale/SDN)
-        let maduraiVms = [];
-        const maduraiIps = ['10.60.60.1', '10.90.90.1', '10.70.70.1'];
-        for (const mIp of maduraiIps) {
+        for (const mIp of meshHostIps) {
             try {
-                const pveAxiosMadurai = require('axios').create({
+                const targetAxios = require('axios').create({
                     baseURL: `https://${mIp}:8006`,
                     httpsAgent: new require('https').Agent({ rejectUnauthorized: false }),
                     timeout: 5000
                 });
-                const authRes = await pveAxiosMadurai.post('/api2/json/access/ticket', {username: 'root@pam', password: PVE_PASSWORD});
+                const authRes = await targetAxios.post('/api2/json/access/ticket', {username: 'root@pam', password: PVE_PASSWORD});
                 const mTicket = authRes.data.data.ticket;
                 const mCsrf = authRes.data.data.CSRFPreventionToken;
                 const mHeaders = { 'Cookie': 'PVEAuthCookie=' + mTicket, 'CSRFPreventionToken': mCsrf };
-                const mRes = await pveAxiosMadurai.get('/api2/json/cluster/resources?type=vm', { headers: mHeaders });
+                const mRes = await targetAxios.get('/api2/json/cluster/resources?type=vm', { headers: mHeaders });
                 if (mRes.data && mRes.data.data) {
-                    // Filter specifically for this node just in case they return partial cluster data
-                    maduraiVms.push(...mRes.data.data);
+                    allVmsRaw.push(...mRes.data.data);
                 }
             } catch(merr) {
-                console.error(`[Mesh Status] Failed to fetch VMs from Madurai Node ${mIp}:`, merr.message);
+                console.error(`[Mesh Status] Failed to fetch VMs from Node ${mIp}:`, merr.message);
             }
         }
-
-        const allVmsRaw = [...dublinVms, ...maduraiVms];
 
         clusterVms = allVmsRaw.map(v => ({
             id: String(v.vmid),
