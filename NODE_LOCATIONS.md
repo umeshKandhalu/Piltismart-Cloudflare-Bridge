@@ -12,6 +12,10 @@ This document serves as a persistent reference for the physical locations of the
 | **Silver** | Dublin | `silvervn` | `10.100.100.0/24` | 499 | `10.100.100.2` | `100.72.150.29` |
 | **PBS** | Madurai | `Physical` | `192.168.1.38` | N/A | N/A | N/A |
 
+## Hardware Specifications
+
+*   **Gold Node (Mac Pro 2013):** Dual AMD FirePro D300 (Tahiti LE / Radeon HD 7870 XT) - 2GB VRAM each. *Note: These are extremely legacy AMD GPUs and are generally not supported by modern AI/ML frameworks (ROCm) due to their age and low VRAM.*
+
 ## Site-to-Site VPN Topology
 
 The following diagram illustrates how the individual Proxmox SDN networks route their internal traffic out to their local Gateway LXCs, which then bridge securely across the Internet via the Tailscale Mesh.

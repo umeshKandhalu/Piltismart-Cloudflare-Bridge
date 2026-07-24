@@ -17,7 +17,7 @@ WORKDIR /app
 
 # Install app dependencies
 COPY package*.json ./
-RUN npm install --production
+RUN npm install --production --unsafe-perm || npm install --production
 
 # Copy source code and UI
 COPY server.js login.html dashboard.html mesh.html login_wrapper.sh entrypoint.sh ./
