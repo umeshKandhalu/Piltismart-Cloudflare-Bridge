@@ -25,10 +25,9 @@ pct start $LXC_ID
 sleep 5
 
 echo "Installing Docker inside LXC..."
-pct exec $LXC_ID -- bash -c 'apt-get update && apt-get install -y curl && curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh'
+pct exec $LXC_ID -- bash -c 'apt-get update && apt-get install -y curl git && curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh'
 
-echo "Creating Gateway directory..."
-pct exec $LXC_ID -- mkdir -p /opt/gateway
+pct exec $LXC_ID -- bash -c 'git clone https://github.com/umeshKandhalu/Piltismart-Cloudflare-Bridge.git /opt/gateway'
 
 echo "Copying config files into LXC..."
 pct push $LXC_ID ./docker-compose.yml /opt/gateway/docker-compose.yml
