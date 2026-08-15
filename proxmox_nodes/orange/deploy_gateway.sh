@@ -29,9 +29,12 @@ pct exec $LXC_ID -- bash -c 'apt-get update && apt-get install -y curl git && cu
 
 pct exec $LXC_ID -- bash -c 'git clone https://github.com/umeshKandhalu/Piltismart-Cloudflare-Bridge.git /opt/gateway'
 
-echo "Copying config files into LXC..."
-pct push $LXC_ID ./docker-compose.yml /opt/gateway/docker-compose.yml
-pct push $LXC_ID ./.env /opt/gateway/.env
+echo "Copying .env file into LXC..."
+if [ -f "./.env" ]; then
+  pct push $LXC_ID ./.env /opt/gateway/.env
+else
+  echo "[WARNING] .env file not found in current directory! Gateway container might fail to start."
+fi
 
 echo "Deploying Gateway container..."
 pct exec $LXC_ID -- bash -c 'cd /opt/gateway && docker compose up -d --build'
