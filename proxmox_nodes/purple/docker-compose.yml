@@ -1,13 +1,12 @@
 services:
   tb-ssh-bridge:
-    image: piltismart/gateway:v3.11.0
+    image: piltismart/gateway:v3.9.0
     build: .
     container_name: piltismart-gateway
     network_mode: host
     restart: unless-stopped
     volumes:
       - ./data:/data
-      - ./beszel_data:/beszel_data
     environment:
       - TB_SERVER=${TB_SERVER:-https://tb.piltismart.com}
       - CF_API_TOKEN=${CF_API_TOKEN}
@@ -20,13 +19,3 @@ services:
       - PVE_NODE=${PVE_NODE}
       - GATEWAY_API_KEY=${GATEWAY_API_KEY}
       - DATA_DIR=/data
-
-  beszel:
-    image: 'henrygd/beszel:latest'
-    container_name: 'beszel'
-    restart: unless-stopped
-    network_mode: host
-    environment:
-      - TRUSTED_AUTH_HEADER=X-Webauth-User
-    volumes:
-      - ./beszel_data:/beszel_data
