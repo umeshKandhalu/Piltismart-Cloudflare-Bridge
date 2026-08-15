@@ -34,6 +34,6 @@ pct push $LXC_ID ./docker-compose.yml /opt/gateway/docker-compose.yml
 pct push $LXC_ID ./.env /opt/gateway/.env
 
 echo "Deploying Gateway container..."
-pct exec $LXC_ID -- bash -c 'cd /opt/gateway && docker compose up -d'
+pct exec $LXC_ID -- bash -c 'cd /opt/gateway && docker compose up -d --build'
 
 echo "Gateway Deployment Completed!"
