@@ -1,8 +1,11 @@
 #!/bin/bash
 set -e
 
-VMID=101
-IP="10.20.20.20"
+# Dynamic VMID and IP assignment with fallback
+VMID=${1:-${VMID:-$(pvesh get /cluster/nextid 2>/dev/null || echo 101)}}
+IP=${2:-${IP:-"10.20.20.20"}}
+VNET=${3:-${VNET:-"orangevn"}}
+GW=${4:-${GW:-"10.20.20.1"}}
 
 echo "Downloading Ubuntu 22.04 Cloud Image..."
 wget -q -nc -O /var/lib/vz/template/iso/jammy-server-cloudimg-amd64.img https://cloud-images.ubuntu.com/jammy/current/jammy-server-cloudimg-amd64.img || true
@@ -27,12 +30,12 @@ runcmd:
   - systemctl start nginx
 EOF
 
-echo "Creating VM $VMID..."
+echo "Creating VM $VMID with IP $IP on $VNET..."
 # Destroy if already exists
 qm stop $VMID || true
 qm destroy $VMID || true
 
-qm create $VMID --name test-vm --memory 1024 --core 1 --net0 virtio,bridge=orangevn
+qm create $VMID --name test-vm-$VMID --memory 1024 --core 1 --net0 virtio,bridge=$VNET
 qm importdisk $VMID /var/lib/vz/template/iso/jammy-server-cloudimg-amd64.img local-lvm
 qm set $VMID --scsihw virtio-scsi-pci --scsi0 local-lvm:vm-$VMID-disk-0
 qm resize $VMID scsi0 10G
@@ -40,7 +43,7 @@ qm set $VMID --ide2 local-lvm:cloudinit
 qm set $VMID --boot c --bootdisk scsi0
 qm set $VMID --serial0 socket --vga serial0
 qm set $VMID --cicustom "user=local:snippets/user-data.yaml"
-qm set $VMID --ipconfig0 ip=$IP/24,gw=10.20.20.1
+qm set $VMID --ipconfig0 ip=$IP/24,gw=$GW
 qm set $VMID --nameserver 8.8.8.8
 qm set $VMID --agent 1
 

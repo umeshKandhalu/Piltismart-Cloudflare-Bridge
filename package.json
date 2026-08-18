@@ -1,6 +1,6 @@
 {
   "name": "tb-ssh-bridge",
-  "version": "3.11.0",
+  "version": "3.13.0",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

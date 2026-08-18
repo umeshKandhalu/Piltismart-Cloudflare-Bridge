@@ -1,14 +1,18 @@
 #!/bin/bash
 set -e
 
-LXC_ID=100
+# Dynamic VMID and IP assignment with fallback
+LXC_ID=${1:-${LXC_ID:-$(pvesh get /cluster/nextid 2>/dev/null || echo 100)}}
+IP=${2:-${IP:-"10.20.20.10"}}
+VNET=${3:-${VNET:-"orangevn"}}
+GW=${4:-${GW:-"10.20.20.1"}}
 LXC_TEMPLATE="local:vztmpl/ubuntu-22.04-standard_22.04-1_amd64.tar.zst"
 
-echo "Creating LXC $LXC_ID (Test Server)..."
-pct create $LXC_ID $LXC_TEMPLATE --hostname test-server \
+echo "Creating LXC $LXC_ID (Test Server) with IP $IP on $VNET..."
+pct create $LXC_ID $LXC_TEMPLATE --hostname test-server-$LXC_ID \
   --cores 1 --memory 512 --swap 512 \
   --rootfs local-lvm:8 \
-  --net0 name=eth0,bridge=orangevn,ip=10.20.20.10/24,gw=10.20.20.1 \
+  --net0 name=eth0,bridge=$VNET,ip=$IP/24,gw=$GW \
   --nameserver 8.8.8.8 \
   --unprivileged 1 \
   --password qwer1234 || echo "Container may already exist"

@@ -1,3 +1,21 @@
+# Release Notes - v3.13.0
+
+## Features
+- **Deploy Gateway Workspace Skill (`deploy-gateway`)**: Added comprehensive Antigravity workspace skill for deploying, configuring, verifying, and troubleshooting Gateway LXC containers and SDN infrastructure on Proxmox nodes.
+- **Dynamic Sample Test Server Deployment**: 
+  - Updated test server scripts (`deploy_test_server.sh` and `deploy_test_vm.sh` across `orange` and `purple` nodes) to dynamically query available VMIDs from Proxmox via `pvesh get /cluster/nextid`.
+  - Added full support for customizing VMID, IP, VNet, and Gateway via command-line arguments or environment variables.
+- **Automated Test Route Registration & Teardown**: Documented end-to-end route registration (`POST /register`), verification, and full cleanup/teardown steps (`POST /unregister`, `pct destroy`, `qm destroy`) to cleanly remove test instances after validation.
+
+---
+
+# Release Notes - v3.12.0
+
+## Features
+- **Tailscale Subnet Routing & Custom Hostnames**: Integrated Tailscale subnet routing with custom hostnames in Proxmox node gateways.
+
+---
+
 # Release Notes - v3.10.0
 
 ## Features
